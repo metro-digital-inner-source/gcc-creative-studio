@@ -3,11 +3,11 @@
 **Date**: 2026-06-08  
 **Branch**: `deployment-status-2026-06-08`  
 **Environment**: Development (`cf-genaistudi-genai-studio--gv`)  
-**Status**: � **MOSTLY DEPLOYED** (70% Complete)
+**Status**: 🟢 **BACKEND FULLY OPERATIONAL** (73% Complete)
 
 ---
 
-## ✅ Successfully Deployed (44 Resources)
+## ✅ Successfully Deployed (46 Resources)
 
 ### Core Infrastructure
 - ✅ **15 GCP APIs enabled**
@@ -50,9 +50,23 @@
   - ✅ **Ready for deployment**
 - ✅ **IAM Bindings**: Run Developer, Cloud SQL Client, Storage Admin, Firestore Developer, Vertex AI User, Logging Writer, SA Token Creator
 
+### Cloud Build (DEPLOYED! 🎉)
+- ✅ **GitHub Connection**: `genaistudio-dev`
+  - Region: europe-west3
+  - Connected to: metro-digital-inner-source/gcc-creative-studio
+  - Status: COMPLETE
+- ✅ **Repository Link**: `gcc-creative-studio`
+  - Auto-synced with GitHub
+- ✅ **Backend Build Trigger**: `cstudio-backend-dev-trigger`
+  - Watches: `develop` branch
+  - Triggers on: Push to backend/** files
+  - Builds: backend/cloudbuild.yaml
+  - Deploys to: cstudio-backend-dev Cloud Run service
+  - ✅ **CI/CD READY** - Push to develop branch will auto-deploy!
+
 ---
 
-## ⏸️ Pending Deployment (19 Resources)
+## ⏸️ Pending Deployment (17 Resources)
 
 ### 🚫 Blocked by Missing Permissions
 
@@ -278,7 +292,10 @@ All deployed resources comply with these org policies:
 
 3. **Firebase** (`infra/modules/platform/main.tf`):
    - Temporarily commented out (lines 137-197)
-   - Can be re-enabled once `roles/serviceusage.apiKeysAdmin` is granted
+   - Can be re-enabled once `roles/serviceusage.apiKeysAdmin` API is working
+
+4. **Cloud Build Connection** (`infra/environments/dev/dev.tfvars`):
+   - Updated from `metro-inner-source-con` to `genaistudio-dev` (actual connection name created)
 
 ---
 
