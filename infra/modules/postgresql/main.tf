@@ -25,9 +25,41 @@ resource "google_sql_database_instance" "default" {
   settings {
     tier = "db-perf-optimized-N-2"
     
-    # Enable IAM Authentication for better security (optional but recommended)
+    # Backup configuration (org policy requirement)
+    backup_configuration {
+      enabled                        = true
+      start_time                     = "03:00"  # 3 AM UTC
+      point_in_time_recovery_enabled = true
+      transaction_log_retention_days = 7
+      backup_retention_settings {
+        retained_backups = 30
+        retention_unit   = "COUNT"
+      }
+    }
+
+    # Password policy configuration (org policy requirement - min 21 chars!)
+    password_validation_policy {
+      min_length                  = 21
+      complexity                  = "COMPLEXITY_DEFAULT"
+      reuse_interval             = 5
+      disallow_username_substring = true
+      enable_password_policy      = true
+    }
+    
+    # Enable IAM Authentication for better security
     database_flags {
       name  = "cloudsql.iam_authentication"
+      value = "on"
+    }
+
+    # Mandatory logging flags for compliance (org policy requirement)
+    database_flags {
+      name  = "log_connections"
+      value = "on"
+    }
+
+    database_flags {
+      name  = "log_disconnections"
       value = "on"
     }
 

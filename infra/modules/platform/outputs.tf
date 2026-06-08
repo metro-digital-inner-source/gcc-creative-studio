@@ -19,10 +19,11 @@ output "backend_service_url" {
   value       = module.backend_service.service_url # This one is correct
 }
 
-output "frontend_service_url" {
-  description = "The URL of the deployed frontend service."
-  value       = module.frontend_service.url
-}
+# TEMPORARILY COMMENTED OUT - Firebase module disabled
+# output "frontend_service_url" {
+#   description = "The URL of the deployed frontend service."
+#   value       = module.frontend_service.url
+# }
 
 output "cloud_sql_connection_name" {
   description = "The connection name of the Cloud SQL instance to be used by the bootstrap script."
