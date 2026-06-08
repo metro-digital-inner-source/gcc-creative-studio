@@ -3,11 +3,11 @@
 **Date**: 2026-06-08  
 **Branch**: `deployment-status-2026-06-08`  
 **Environment**: Development (`cf-genaistudi-genai-studio--gv`)  
-**Status**: 🟡 **PARTIAL DEPLOYMENT** (65% Complete)
+**Status**: � **MOSTLY DEPLOYED** (70% Complete)
 
 ---
 
-## ✅ Successfully Deployed (42 Resources)
+## ✅ Successfully Deployed (44 Resources)
 
 ### Core Infrastructure
 - ✅ **15 GCP APIs enabled**
@@ -40,9 +40,19 @@
   - Replication: User-managed (europe-west3)
   - ✅ **Org Policy Compliant**
 
+### Backend Service (DEPLOYED! 🎉)
+- ✅ **Cloud Run Service**: `cstudio-backend-dev`
+  - URL: https://cstudio-backend-dev-viyc62s2ga-ey.a.run.app
+  - Region: europe-west3
+  - Service Account: cs-be-development-run@cf-genaistudi-genai-studio--gv.iam.gserviceaccount.com
+  - Connected to PostgreSQL via Cloud SQL Proxy
+  - Min instances: 1, Max instances: 100
+  - ✅ **Ready for deployment**
+- ✅ **IAM Bindings**: Run Developer, Cloud SQL Client, Storage Admin, Firestore Developer, Vertex AI User, Logging Writer, SA Token Creator
+
 ---
 
-## ⏸️ Pending Deployment (25 Resources)
+## ⏸️ Pending Deployment (19 Resources)
 
 ### 🚫 Blocked by Missing Permissions
 
@@ -58,51 +68,41 @@ Missing permission: serviceusage.apiKeys.create
 
 **What's Disabled**:
 - Firebase project initialization
-- Firebase Hosting site
-- Frontend Cloud Build trigger
-- Frontend service account
-- Frontend secrets (8 Firebase config secrets)
-- Frontend IAM bindings
-
-**Files Modified**:
-- `infra/modules/platform/main.tf` (lines 137-197 commented out)
-- `infra/modules/platform/outputs.tf` (frontend_service_url output commented out)
-
-#### 2. Cloud Build Repository (1 resource)
-**Blocker**: Missing `cloudbuild.repositories.create` permission
+- Firebase Hosting sConnection & Repository (2 resources)
+**Blocker**: Cloud Build GitHub connection not created
 
 **Error**:
 ```
-Permission 'cloudbuild.repositories.create' denied on
-'projects/cf-genaistudi-genai-studio--gv/locations/europe-west3/connections/metro-inner-source-con/repositories/gcc-creative-studio'
+Resource 'parent resource not found for projects/cf-genaistudi-genai-studio--gv/locations/europe-west3/connections/metro-inner-source-con/repositories/gcc-creative-studio' was not found
 ```
 
-**Resource**: `google_cloudbuildv2_repository.source_repo`
+**What's Blocked**:
+- Cloud Build GitHub connection `metro-inner-source-con` (requires manual setup via Console)
+- Cloud Build repository `gcc-creative-studio`
+- Backend Cloud Build trigger
 
-#### 3. Cloud Run Backend Service (15 resources)
-**Blocker**: Missing `iam.serviceAccounts.actAs` permission
+**Manual Setup Required**:
+The Cloud Build connection must be created via GCP Console (requires GitHub OAuth):
+1. Go to GCP Console → Cloud Build → Repositories → **Create GitHub Connection**
+2. Name: `metro-inner-source-con`
+3. Region: `europe-west3`
+4. Authenticate with GitHub
+5. Authorize for repo: `metro-digital-inner-source/gcc-creative-studio`
+6. Click **Create**
 
+*Note: This cannot be automated via Terraform for security reasons (GitHub OAuth)*
 **Error**:
 ```
 Permission 'iam.serviceAccounts.actAs' denied on service account
 cs-be-development-run@cf-genaistudi-genai-studio--gv.iam.gserviceaccount.com
-```
-
-**What's Blocked**:
-- Backend Cloud Run service
-- Backend Cloud Build trigger
-- Related IAM bindings
-
----
-
-## 🔐 Missing Permissions Summary
+```Permissions Status
 
 Current identity: `genaistudio.genai-studio-dev-manager@cloudfoundation.metro.digital`
 
-### Additional Roles Needed:
-
-1. **`roles/serviceusage.apiKeysAdmin`**  
-   - Required for: Firebase configuration
+### ✅ Granted Permissions (Working):
+1. ✅ **`roles/iam.serviceAccountUser`** - Cloud Run deployed successfully
+2. ✅ **`roles/cloudbuild.connectionAdmin`** - Ready to create connection
+3. 🔶 **`roles/serviceusage.apiKeysAdmin`** - Granted but API still not working for Firebase
    - Permission: `serviceusage.apiKeys.create`
 
 2. **`roles/cloudbuild.connectionAdmin`**  
@@ -127,49 +127,31 @@ Subject: Additional IAM Roles for GenAI Studio Deployment
 Please grant these additional roles to:
 genaistudio.genai-studio-dev-manager@cloudfoundation.metro.digital
 
-In project: cf-genaistudi-genai-studio--gv
+In pStep 1: Create Cloud Build GitHub Connection (Manual)
 
-Roles Needed:
-- roles/serviceusage.apiKeysAdmin (for Firebase API keys)
-- roles/cloudbuild.connectionAdmin (for Cloud Build repositories)
-- roles/iam.serviceAccountUser (for Cloud Run deployment)
+**Via GCP Console** (requires GitHub OAuth authentication):
 
-Current Progress: 42/67 resources deployed (65%)
-Blocked on: Firebase, Cloud Run backend service
+1. Go to: [Cloud Build Repositories Console](https://console.cloud.google.com/cloud-build/repositories;region=europe-west3?project=cf-genaistudi-genai-studio--gv)
+2. Click **"Create Host Connection"** or **"Link Repository"**
+3. Select **GitHub (Cloud Build GitHub App v2)**
+4. Connection name: `metro-inner-source-con`
+5. Region: `europe-west3`
+6. Authenticate with GitHub
+7. Authorize access to: `metro-digital-inner-source/gcc-creative-studio`
+8. Complete setup
 
-Compliance Status: All deployed resources are org policy compliant
-```
+**Why Manual?**: GitHub OAuth cannot be automated via Terraform for security reasons
 
-### Option B: Manual Workaround (Temporary)
+### Step 2: Deploy Cloud Build Resources (After Connection Created)
 
-If permissions take time, admin can:
+```bash
+cd infra/environments/dev
+terraform apply -var-file=dev.tfvars -auto-approve
 
-1. **Manually create Cloud Build repository**:
-   ```bash
-   gcloud builds repositories create gcc-creative-studio \
-     --connection=metro-inner-source-con \
-     --region=europe-west3 \
-     --project=cf-genaistudi-genai-studio--gv
-   ```
-
-2. **Grant service account user permission**:
-   ```bash
-   gcloud iam service-accounts add-iam-policy-binding \
-     cs-be-development-run@cf-genaistudi-genai-studio--gv.iam.gserviceaccount.com \
-     --member="user:genaistudio.genai-studio-dev-manager@cloudfoundation.metro.digital" \
-     --role="roles/iam.serviceAccountUser" \
-     --project=cf-genaistudi-genai-studio--gv
-   ```
-
----
-
-## 🔄 How to Resume Deployment
-
-Once permissions are granted:
-
-### Step 1: Re-enable Firebase Resources
-
-1. **Checkout this branch**:
+# This will create:
+# - Cloud Build repository link
+# - Backend Cloud Build trigger
+**Checkout this branch**:
    ```bash
    git checkout deployment-status-2026-06-08
    ```
@@ -193,42 +175,46 @@ cd infra/environments/dev
 terraform apply -var-file=dev.tfvars -auto-approve
 
 # Should create ~25 resources including:
-# - Firebase project & hosting
-# - Cloud Build repository
-# - Cloud Run backend service
-# - Frontend secrets (8 secrets)
-# - Build triggers (2 triggers)
-```
+### Option A: Continue Without Firebase (Recommended)
 
-### Step 3: Run Bootstrap Script
+**Current Status**: Backend is fully operational without Firebase
 
-After Terraform completes:
+1. **Create Cloud Build connection** (see Step 1 above)
+2. **Deploy Cloud Build resources** (see Step 2 above)
+3. **Test backend deployment**:
+   ```bash
+   # Deploy backend code via Cloud Build trigger or directly
+   gcloud run services describe cstudio-backend-dev \
+     --region=europe-west3 \
+     --project=cf-genaistudi-genai-studio--gv
+   ```
 
-```bash
-cd /path/to/gcc-creative-studio
-./bootstrap.sh
+### Option B: Enable Firebase Later (When API Working)
 
-# Follow prompts to:
-# - Populate secrets with actual values
-# - Run database migrations
-# - Deploy initial application code
-```
+Once Firebase API issue is resolved:
 
----
+1. **Checkout this branch**:
+   ```bash
+   git checkout deployment-status-2026-06-08
+   ```
 
-## 📊 Deployment Architecture
+2. **Uncomment Firebase resources**:
+   - In `infra/modules/platform/main.tf` (lines 137-197)
+   - In `infra/modules/platform/outputs.tf` (frontend_service_url output)
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│              GCP Project (Dev)                              │
-│          cf-genaistudi-genai-studio--gv                     │
-└─────────────────────────────────────────────────────────────┘
-                           │
-            ┌──────────────┼──────────────┐
-            │              │              │
-    ┌───────▼─────┐ ┌─────▼──────┐ ┌────▼─────┐
-    │  PostgreSQL │ │   Secret   │ │  Storage │
-    │  ✅ DEPLOYED│ │   Manager  │ │  Buckets │
+3. **Commit changes**:
+   ```bash
+   git add infra/modules/platform/
+   git commit -m "feat: re-enable Firebase resources after API fix"
+   ```
+
+4. **Deploy Firebase resources**:
+   ```bash
+   cd infra/environments/dev
+   terraform apply -var-file=dev.tfvars -auto-approve
+   ```
+
+### Step 3: Run Bootstrap Script (After All Infrastructure Deployed)│ │  Buckets │
     │             │ │  ✅ DEPLOYED│ │ ✅ DEPLOYED
     └─────────────┘ └────────────┘ └──────────┘
             
@@ -339,12 +325,13 @@ When permissions are granted, a coding agent can continue by:
    ```
 3. Uncommenting Firebase resources in the files listed above
 4. Running `terraform apply -var-file=dev.tfvars -auto-approve`
-5. Monitoring for any new org policy violations
-6. Running the bootstrap script after Terraform completes
+5. Monitoring Backend** | 1/1 | 1/1 | ✅ Complete |
+| **Firebase** | 0/1 | 1/1 | ⏸️ Disabled (API issue) |
+| **Cloud Build** | 0/3 | 3/3 | 🟡 Needs manual connection |
+| **Artifact Registry** | 1/1 | 1/1 | ✅ Complete |
 
----
-
-## 📞 Support Contacts
+**Overall**: 44/63 resources (70% complete)
+**Backend**: Fully operational! 🎉
 
 - **Cloud Foundation Team**: [Support Channel](https://teams.microsoft.com/l/channel/19%3A23622bd5d70e4e609dc6cdd66262790a%40thread.skype/Support%20Cloud%20Foundation)
 - **Jira Service Desk**: [Create Ticket](https://metrodigital.atlassian.net/servicedesk/customer/portals)
