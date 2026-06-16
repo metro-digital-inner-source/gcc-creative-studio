@@ -134,50 +134,46 @@ module "backend_service" {
   db_secret_id              = "creative-studio-db-password"
 }
 
-# TEMPORARILY COMMENTED OUT - MISSING PERMISSION: roles/serviceusage.apiKeysAdmin
-# Will be re-enabled once permission is granted
-# See DEPLOYMENT_STATUS.md for details
-# 
-# resource "google_firebase_project" "default" {
-#   provider = google-beta
-#   project = var.gcp_project_id
-# }
-# 
-# module "frontend_service" {
-#   source = "../firebase-hosting-service"
-# 
-#   source_repository_id = google_cloudbuildv2_repository.source_repo.id
-#   gcp_project_id       = var.gcp_project_id
-#   gcp_region            = var.gcp_region
-#   firebase_project_id  = google_firebase_project.default.project
-#   service_name         = var.gcp_project_id
-#   environment          = var.environment
-#   resource_prefix      = "cs-fe"
-#   github_branch_name   = var.github_branch_name
-#   cloudbuild_yaml_path = "frontend/cloudbuild-deploy.yaml"
-#   included_files_glob  = ["frontend/**"]
-#   firebase_site_id     = var.firebase_site_id != "" ? var.firebase_site_id : var.gcp_project_id
-# 
-#   build_substitutions = merge(
-#     var.fe_build_substitutions,
-#     {
-#       # This block should ONLY contain non-secret, underscore-prefixed values
-#       _BACKEND_URL         = local.frontend_url # The frontend will redirect the api calls to the backend
-#       _FE_SERVICE_NAME     = var.frontend_service_name
-#       _BACKEND_SERVICE_ID  = var.backend_service_name
-#       _FIREBASE_PROJECT_ID = var.gcp_project_id
-#       _FIREBASE_SITE_ID    = var.firebase_site_id != "" ? var.firebase_site_id : var.gcp_project_id
-#     }
-#   )
-# }
-# 
-# module "frontend_secrets" {
-#   source = "../secret-manager"
-# 
-#   gcp_project_id    = var.gcp_project_id
-#   secret_names      = var.frontend_secrets
-#   accessor_sa_email = module.frontend_service.trigger_sa_email
-# }
+resource "google_firebase_project" "default" {
+  provider = google-beta
+  project = var.gcp_project_id
+}
+
+module "frontend_service" {
+  source = "../firebase-hosting-service"
+
+  source_repository_id = google_cloudbuildv2_repository.source_repo.id
+  gcp_project_id       = var.gcp_project_id
+  gcp_region            = var.gcp_region
+  firebase_project_id  = google_firebase_project.default.project
+  service_name         = var.gcp_project_id
+  environment          = var.environment
+  resource_prefix      = "cs-fe"
+  github_branch_name   = var.github_branch_name
+  cloudbuild_yaml_path = "frontend/cloudbuild-deploy.yaml"
+  included_files_glob  = ["frontend/**"]
+  firebase_site_id     = var.firebase_site_id != "" ? var.firebase_site_id : var.gcp_project_id
+
+  build_substitutions = merge(
+    var.fe_build_substitutions,
+    {
+      # This block should ONLY contain non-secret, underscore-prefixed values
+      _BACKEND_URL         = local.frontend_url # The frontend will redirect the api calls to the backend
+      _FE_SERVICE_NAME     = var.frontend_service_name
+      _BACKEND_SERVICE_ID  = var.backend_service_name
+      _FIREBASE_PROJECT_ID = var.gcp_project_id
+      _FIREBASE_SITE_ID    = var.firebase_site_id != "" ? var.firebase_site_id : var.gcp_project_id
+    }
+  )
+}
+
+module "frontend_secrets" {
+  source = "../secret-manager"
+
+  gcp_project_id    = var.gcp_project_id
+  secret_names      = var.frontend_secrets
+  accessor_sa_email = module.frontend_service.trigger_sa_email
+}
 
 module "backend_secrets" {
   source = "../secret-manager"
@@ -189,14 +185,11 @@ module "backend_secrets" {
 
 # --- Cross-Module Permissions ---
 
-# TEMPORARILY COMMENTED OUT - Depends on frontend_service module
-# Will be re-enabled once Firebase resources are deployed
-# 
-# resource "google_cloud_run_v2_service_iam_member" "fe_trigger_can_view_backend" {
-#   provider = google-beta
-#   project  = var.gcp_project_id
-#   name     = module.backend_service.service_name
-#   location = module.backend_service.location
-#   role     = "roles/run.viewer"
-#   member   = "serviceAccount:${module.frontend_service.trigger_sa_email}"
-# }
+resource "google_cloud_run_v2_service_iam_member" "fe_trigger_can_view_backend" {
+  provider = google-beta
+  project  = var.gcp_project_id
+  name     = module.backend_service.service_name
+  location = module.backend_service.location
+  role     = "roles/run.viewer"
+  member   = "serviceAccount:${module.frontend_service.trigger_sa_email}"
+}
