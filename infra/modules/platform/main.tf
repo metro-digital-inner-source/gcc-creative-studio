@@ -161,6 +161,7 @@ module "frontend_service" {
       _BACKEND_URL         = local.frontend_url # The frontend will redirect the api calls to the backend
       _FE_SERVICE_NAME     = var.frontend_service_name
       _BACKEND_SERVICE_ID  = var.backend_service_name
+      _BACKEND_REGION      = var.gcp_region
       _FIREBASE_PROJECT_ID = var.gcp_project_id
       _FIREBASE_SITE_ID    = var.firebase_site_id != "" ? var.firebase_site_id : var.gcp_project_id
     }
@@ -185,8 +186,6 @@ module "backend_secrets" {
 
 # --- Cross-Module Permissions ---
 
-# Grant the Frontend's deploy trigger (which runs `firebase deploy`)
-# permission to "get" the Backend's Cloud Run service to validate the rewrite rule.
 resource "google_cloud_run_v2_service_iam_member" "fe_trigger_can_view_backend" {
   provider = google-beta
   project  = var.gcp_project_id
