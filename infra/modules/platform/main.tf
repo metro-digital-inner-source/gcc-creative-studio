@@ -161,6 +161,7 @@ module "frontend_service" {
       _BACKEND_URL         = local.frontend_url # The frontend will redirect the api calls to the backend
       _FE_SERVICE_NAME     = var.frontend_service_name
       _BACKEND_SERVICE_ID  = var.backend_service_name
+      _BACKEND_REGION      = var.gcp_region
       _FIREBASE_PROJECT_ID = var.gcp_project_id
       _FIREBASE_SITE_ID    = var.firebase_site_id != "" ? var.firebase_site_id : var.gcp_project_id
     }

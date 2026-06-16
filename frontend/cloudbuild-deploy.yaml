@@ -42,11 +42,13 @@ steps:
         # Inject into Firebase config (firebase.json)
         sed -i "s|SITE_ID_PLACEHOLDER|${_FIREBASE_SITE_ID}|g" firebase.json
         sed -i "s|BACKEND_SERVICE_ID_PLACEHOLDER|$${_BACKEND_SERVICE_ID}|g" firebase.json
+        sed -i "s|BACKEND_REGION_PLACEHOLDER|$${_BACKEND_REGION}|g" firebase.json
     dir: frontend
     env:
       - '_BACKEND_URL=${_BACKEND_URL}'
       - '_FE_SERVICE_NAME=${_FE_SERVICE_NAME}'
       - '_BACKEND_SERVICE_ID=${_BACKEND_SERVICE_ID}'
+      - '_BACKEND_REGION=${_BACKEND_REGION}'
       - '_FIREBASE_SITE_ID=${_FIREBASE_SITE_ID}'
     secretEnv:
       - FIREBASE_API_KEY
@@ -76,7 +78,7 @@ steps:
       - 'firebase'
       - 'deploy'
       - '--project=${PROJECT_ID}'
-      - '--only=hosting:${_FIREBASE_SITE_ID}'
+      - '--only=hosting'
       - '--non-interactive'
     waitFor: ['Build Angular App']
     dir: frontend
