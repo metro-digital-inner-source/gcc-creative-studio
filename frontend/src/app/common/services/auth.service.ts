@@ -100,6 +100,7 @@ export class AuthService {
         );
       }),
       catchError((error: any) => {
+        this.clearSessionState();
         console.error('An error occurred during the sign-in process:', error);
         return throwError(
           () => new Error(`Sign-in failed. Please try again. ${error}`),
@@ -174,6 +175,10 @@ export class AuthService {
           map(() => idToken), // Pass the token along for the final result.
         );
       }),
+      catchError((error: any) => {
+        this.clearSessionState();
+        return throwError(() => error);
+      }),
     );
   }
 
@@ -240,7 +245,13 @@ export class AuthService {
     // First, check our own session info which is loaded from localStorage.
     // This is synchronous and tells us if we have a valid, non-expired token.
     if (!this.isLoggedIn()) {
-      return of();
+      return throwError(
+        () => new Error('User session is not valid or has expired. 2'),
+      );
+    }
+
+    if (!this.firebaseIdToken) {
+      return throwError(() => new Error('No Identity Platform token found.'));
     }
 
     // Fallback case: The Firebase Auth instance is not yet initialized, but we
@@ -277,20 +288,12 @@ export class AuthService {
     return this.auth
       .signOut()
       .then(() => {
-        this.currentOAuthAccessToken = null; // Clear stored token on logout
-        // Clear Firebase session data
-        this.firebaseIdToken = null;
-        this.firebaseTokenExpiry = null;
-        localStorage.removeItem(FIREBASE_SESSION_KEY);
-        localStorage.removeItem(USER_DETAILS);
-        localStorage.removeItem('showTooltip');
+        this.clearSessionState();
         void this.router.navigateByUrl(route);
       })
       .catch(e => {
         console.error('Sign Out Error', e);
-        localStorage.removeItem(FIREBASE_SESSION_KEY);
-        localStorage.removeItem(USER_DETAILS);
-        localStorage.removeItem('showTooltip');
+        this.clearSessionState();
         void this.router.navigate([LOGIN_ROUTE]);
       });
   }
@@ -374,5 +377,26 @@ export class AuthService {
     // refresh requires re-authentication or more complex flows not covered here.
     // For a simple deploy button click, getting a fresh token on sign-in might suffice.
     return this.currentOAuthAccessToken;
+  }
+
+  private clearSessionState(): void {
+    this.currentOAuthAccessToken = null;
+    this.firebaseIdToken = null;
+    this.firebaseTokenExpiry = null;
+
+    if (!isPlatformBrowser(this.platformId)) return;
+
+    localStorage.removeItem(FIREBASE_SESSION_KEY);
+    localStorage.removeItem(USER_DETAILS);
+    localStorage.removeItem('showTooltip');
+
+    // Reset Google One Tap auto-select so users can explicitly pick an account after logout.
+    try {
+      if (typeof google !== 'undefined' && google?.accounts?.id) {
+        google.accounts.id.disableAutoSelect();
+      }
+    } catch (error) {
+      console.warn('Failed to disable Google auto-select on logout.', error);
+    }
   }
 }
