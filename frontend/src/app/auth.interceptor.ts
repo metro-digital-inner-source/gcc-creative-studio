@@ -31,10 +31,37 @@ import {environment} from '../environments/environment';
 export class AuthInterceptor implements HttpInterceptor {
   constructor(private authService: AuthService) {}
 
+  private normalizeUrl(url: string): string {
+    return url.replace(/\/+$/, '');
+  }
+
+  private shouldAttachToken(request: HttpRequest<unknown>): boolean {
+    // Skip local static assets and non-backend requests.
+    if (
+      request.url.startsWith('assets/') ||
+      request.url.startsWith('/assets/') ||
+      request.url.startsWith('./assets/')
+    ) {
+      return false;
+    }
+
+    const backendBaseUrl = this.normalizeUrl(environment.backendURL || '');
+    if (!backendBaseUrl) {
+      return false;
+    }
+
+    const requestUrl = this.normalizeUrl(request.url);
+    return requestUrl.startsWith(backendBaseUrl);
+  }
+
   intercept(
     request: HttpRequest<unknown>,
     next: HttpHandler,
   ): Observable<HttpEvent<unknown>> {
+    if (!this.shouldAttachToken(request)) {
+      return next.handle(request);
+    }
+
     // Asynchronously get a valid token. This will use the cache or trigger a silent refresh.
     return this.authService.getValidIdentityPlatformToken$().pipe(
       switchMap(token => {
