@@ -44,10 +44,10 @@ const featureRoutes: Routes = [
           canActivate: [AuthGuardService],
         },
       ]
-    : [{path: 'fun-templates', redirectTo: '', pathMatch: 'full'}]),
+    : [{path: 'fun-templates', redirectTo: '', pathMatch: 'full' as const}]),
   ...(environment.ENABLE_VTO
     ? [{path: 'vto', component: VtoComponent, canActivate: [AuthGuardService]}]
-    : [{path: 'vto', redirectTo: '', pathMatch: 'full'}]),
+    : [{path: 'vto', redirectTo: '', pathMatch: 'full' as const}]),
 ];
 
 const routes: Routes = [
