@@ -39,11 +39,11 @@ Just run this script which has a step by step approach for you to deploy the inf
 curl https://raw.githubusercontent.com/GoogleCloudPlatform/gcc-creative-studio/refs/heads/main/bootstrap.sh | bash
 ```
 
-For better guidance, [we recorded a video](./screenshots/how_to_deploy_creative_studio.mp4) to showcase how to deploy Creative Studio in a completely new and fresh GCP Account.
+For better guidance, [we recorded a video](../screenshots/how_to_deploy_creative_studio.mp4) to showcase how to deploy Creative Studio in a completely new and fresh GCP Account.
 
 <video controls autoplay loop width="100%" style="max-width: 1200px;">
-  <source src="./screenshots/how_to_deploy_creative_studio.mp4" type="video/mp4">
-  Your browser does not support the video tag. You can <a href="./screenshots/how_to_deploy_creative_studio.mp4">download the video here</a>.
+  <source src="../screenshots/how_to_deploy_creative_studio.mp4" type="video/mp4">
+  Your browser does not support the video tag. You can <a href="../screenshots/how_to_deploy_creative_studio.mp4">download the video here</a>.
 </video>
 
 ## System Architecture & Dependencies
