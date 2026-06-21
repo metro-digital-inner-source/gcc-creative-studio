@@ -110,10 +110,29 @@ async def get_current_user(
                 ),
             )
 
-        # Check if user is allowed by email or organization
+        # Check if user is allowed by email or organization.
+        # Priority: 1) DB-backed allowlist, 2) Environment variables (fallback)
         is_allowed = False
 
-        if config_service.ALLOWED_EMAILS:
+        # 1. Check DB-backed allowlist first
+        try:
+            from src.allowlist.allowlist_service import AllowlistService
+            
+            allowlist_service = AllowlistService(allowlist_repo=Depends())
+            # Extract domain from email (e.g., example.com from user@example.com)
+            email_parts = email.split("@") if email else []
+            email_domain = email_parts[1] if len(email_parts) > 1 else None
+            
+            is_allowed = await allowlist_service.check_email_allowed(
+                email, email_domain
+            )
+        except Exception as e:
+            logger.debug(
+                f"Could not check DB allowlist (may not be initialized yet): {e}"
+            )
+
+        # 2. Fall back to environment variables if DB check didn't allow
+        if not is_allowed and config_service.ALLOWED_EMAILS:
             if email in config_service.ALLOWED_EMAILS:
                 is_allowed = True
 
@@ -122,6 +141,7 @@ async def get_current_user(
                 is_allowed = True
 
         # If at least one restriction is configured and user is not allowed, reject.
+        # Note: We check if DB allowlist is in use OR env vars are configured
         if (
             config_service.ALLOWED_EMAILS or config_service.ALLOWED_ORGS
         ) and not is_allowed:
