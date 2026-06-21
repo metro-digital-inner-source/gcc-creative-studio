@@ -54,6 +54,8 @@ export class HeaderComponent implements OnDestroy {
   currentUser: UserModel | null;
   menuFixed = false;
   menuIsHovered = false;
+  readonly isVtoEnabled = environment.ENABLE_VTO;
+  readonly isFunTemplatesEnabled = environment.ENABLE_FUN_TEMPLATES;
 
   isDesktop = false;
   private readonly destroy$ = new Subject<void>();

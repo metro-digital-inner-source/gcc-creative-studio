@@ -34,6 +34,7 @@ import {MatDialog} from '@angular/material/dialog';
 import {ActivatedRoute, Router} from '@angular/router';
 import {EventEmitter} from '@angular/core';
 import {Location} from '@angular/common';
+import {environment} from '../../../../environments/environment';
 import {
   handleErrorSnackbar,
   handleSuccessSnackbar,
@@ -70,7 +71,7 @@ export class MediaLightboxComponent
   }
 
   get showVtoButton(): boolean {
-    return this.isImage;
+    return this.isImage && environment.ENABLE_VTO;
   }
   @Output() editClicked = new EventEmitter<number>();
   @Output() generateVideoClicked = new EventEmitter<{

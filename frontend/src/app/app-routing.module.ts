@@ -19,6 +19,7 @@ import {RouterModule, Routes} from '@angular/router';
 import {AdminAuthGuard} from './admin/admin-auth.guard';
 import {AudioComponent} from './audio/audio.component';
 import {AuthGuardService} from './common/services/auth.guard.service';
+import {environment} from '../environments/environment';
 import {FunTemplatesComponent} from './fun-templates/fun-templates.component';
 import {MediaDetailComponent} from './gallery/media-detail/media-detail.component';
 import {MediaGalleryComponent} from './gallery/media-gallery/media-gallery.component';
@@ -34,16 +35,26 @@ import {UpscaleComponent} from './upscale/upscale.component';
 import {UserRolesEnum} from './common/models/user.model';
 import {ProjectsComponent} from './projects/projects.component';
 
+const featureRoutes: Routes = [
+  ...(environment.ENABLE_FUN_TEMPLATES
+    ? [
+        {
+          path: 'fun-templates',
+          component: FunTemplatesComponent,
+          canActivate: [AuthGuardService],
+        },
+      ]
+    : [{path: 'fun-templates', redirectTo: '', pathMatch: 'full'}]),
+  ...(environment.ENABLE_VTO
+    ? [{path: 'vto', component: VtoComponent, canActivate: [AuthGuardService]}]
+    : [{path: 'vto', redirectTo: '', pathMatch: 'full'}]),
+];
+
 const routes: Routes = [
   {path: 'login', component: LoginComponent},
   {path: '', component: HomeComponent, canActivate: [AuthGuardService]},
-  {
-    path: 'fun-templates',
-    component: FunTemplatesComponent,
-    canActivate: [AuthGuardService],
-  },
+  ...featureRoutes,
   {path: 'video', component: VideoComponent, canActivate: [AuthGuardService]},
-  {path: 'vto', component: VtoComponent, canActivate: [AuthGuardService]},
   {path: 'audio', component: AudioComponent, canActivate: [AuthGuardService]},
   {
     path: 'workbench',

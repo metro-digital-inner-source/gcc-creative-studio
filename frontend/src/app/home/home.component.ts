@@ -67,6 +67,7 @@ import {
   handleInfoSnackbar,
   handleSuccessSnackbar,
 } from '../utils/handleMessageSnackbar';
+import {environment} from '../../environments/environment';
 
 @Component({
   selector: 'app-home',
@@ -1218,6 +1219,11 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   sendToVto(index: number) {
+    if (!environment.ENABLE_VTO) {
+      handleInfoSnackbar(this._snackBar, 'Virtual Try-On is currently unavailable.');
+      return;
+    }
+
     if (!this.imagenDocuments) {
       return;
     }

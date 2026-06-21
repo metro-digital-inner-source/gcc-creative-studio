@@ -27,6 +27,8 @@ export const environment = {
   production: true,
   isLocal: false,
   backendURL: 'http://localhost:8080/api',
+  ENABLE_VTO: false,
+  ENABLE_FUN_TEMPLATES: false,
   EMAIL_REGEX:
     /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/,
   ADMIN: 'admin',

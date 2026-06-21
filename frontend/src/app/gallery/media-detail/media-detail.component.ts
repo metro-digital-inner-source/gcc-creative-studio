@@ -37,6 +37,7 @@ import {
 import {GalleryService} from '../gallery.service';
 import {ConfirmationDialogComponent} from '../../common/components/confirmation-dialog/confirmation-dialog.component';
 import {WorkspaceStateService} from '../../services/workspace/workspace-state.service';
+import {environment} from '../../../environments/environment';
 
 @Component({
   selector: 'app-media-detail',
@@ -363,6 +364,10 @@ export class MediaDetailComponent implements OnDestroy {
   }
 
   sendToVto(index: number): void {
+    if (!environment.ENABLE_VTO) {
+      return;
+    }
+
     if (!this.mediaItem) {
       return;
     }
