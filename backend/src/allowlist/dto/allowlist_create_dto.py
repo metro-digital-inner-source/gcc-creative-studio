@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pydantic import BaseModel, field_validator, EmailStr
+from email.utils import parseaddr
+
+from pydantic import BaseModel, field_validator
 
 
 class AllowlistCreateDto(BaseModel):
@@ -29,11 +31,16 @@ class AllowlistCreateDto(BaseModel):
     @classmethod
     def validate_email(cls, v):
         if v:
-            try:
-                # Validate email format
-                EmailStr(v)
-            except ValueError as e:
-                raise ValueError(f"Invalid email format: {v}") from e
+            normalized = v.strip()
+            _, parsed_email = parseaddr(normalized)
+            if (
+                parsed_email != normalized
+                or "@" not in normalized
+                or normalized.startswith("@")
+                or normalized.endswith("@")
+                or " " in normalized
+            ):
+                raise ValueError(f"Invalid email format: {v}")
         return v
 
     @field_validator("domain")
