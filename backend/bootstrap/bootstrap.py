@@ -90,9 +90,22 @@ async def ensure_admin_user_exists(db: AsyncSession) -> UserModel | None:
         existing_user = await user_repo.get_by_email(admin_email)
 
         if existing_user:
-            logger.info(
-                f"User document for '{admin_email}' already exists. ID: {existing_user.id}",
-            )
+            # Ensure the existing user always has the admin role.
+            # This handles the case where the user logged in before ADMIN_USER_EMAIL
+            # was configured, which would have created them with only the USER role.
+            if UserRoleEnum.ADMIN not in (existing_user.roles or []):
+                logger.info(
+                    f"Promoting existing user '{admin_email}' (ID: {existing_user.id}) to admin.",
+                )
+                await user_repo.update(
+                    existing_user.id,
+                    {"roles": [UserRoleEnum.USER, UserRoleEnum.ADMIN]},
+                )
+                logger.info(f"Successfully promoted '{admin_email}' to admin.")
+            else:
+                logger.info(
+                    f"Admin user '{admin_email}' already exists with admin role. ID: {existing_user.id}",
+                )
             return existing_user
         logger.warning(
             f"No user document found for email '{admin_email}'. Creating one.",
