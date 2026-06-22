@@ -64,7 +64,14 @@
         <mat-icon matListItemIcon>label</mat-icon>
         <span matListItemTitle>Tags</span>
       </a>
-      <!-- Add more links for other entities -->
+      <a
+        mat-list-item
+        routerLink="allowlist"
+        routerLinkActive="active-link"
+      >
+        <mat-icon matListItemIcon>verified_user</mat-icon>
+        <span matListItemTitle>Allowlist</span>
+      </a>
     </mat-nav-list>
   </mat-sidenav>
   <mat-sidenav-content class="!m-0 !p-10">

@@ -57,6 +57,7 @@ import {SharedModule} from '../common/shared.module';
 import {MediaGalleryManagementComponent} from './media-gallery-management/media-gallery-management.component';
 import {TagsManagementComponent} from './tags-management/tags-management.component';
 import {AdminHomeComponent} from './admin-home/admin-home.component';
+import {AllowlistManagementComponent} from './allowlist-management/allowlist-management.component';
 
 @NgModule({
   declarations: [
@@ -71,6 +72,7 @@ import {AdminHomeComponent} from './admin-home/admin-home.component';
     MediaGalleryManagementComponent,
     TagsManagementComponent,
     AdminHomeComponent,
+    AllowlistManagementComponent,
   ],
   imports: [
     CommonModule,
