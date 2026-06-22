@@ -19,9 +19,13 @@
     <div>
       <h1 class="text-3xl font-semibold">Allowlist Management</h1>
       <p class="text-sm text-gray-500 mt-1">
-        Add an email or domain to grant access to the app. Users log in automatically on first visit.
+        Add a user email or an organization domain to grant access to the app.
       </p>
     </div>
+    <button mat-raised-button color="primary" type="button" (click)="focusAddUserForm()">
+      <mat-icon>person_add</mat-icon>
+      Add User
+    </button>
   </div>
 
   <!-- Add entry card -->
@@ -34,9 +38,9 @@
     <mat-card-content>
       <form [formGroup]="addForm" (ngSubmit)="onAdd()" class="flex flex-wrap gap-4 items-start mt-4">
         <mat-form-field appearance="outline" class="flex-1 min-w-[220px]">
-          <mat-label>Email (exact)</mat-label>
+          <mat-label>User email</mat-label>
           <mat-icon matPrefix class="mr-2">person</mat-icon>
-          <input matInput formControlName="email" placeholder="user@company.com" autocomplete="off" />
+          <input #emailInput matInput formControlName="email" placeholder="user@company.com" autocomplete="off" />
           <mat-error *ngIf="addForm.get('email')?.hasError('email')">
             Enter a valid email address.
           </mat-error>
@@ -61,7 +65,7 @@
             [disabled]="addForm.invalid || isSubmitting"
           >
             <mat-icon>add</mat-icon>
-            Add Entry
+            Add User
           </button>
         </div>
       </form>

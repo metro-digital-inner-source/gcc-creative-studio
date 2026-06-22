@@ -16,6 +16,7 @@
 
 import {
   Component,
+  ElementRef,
   OnInit,
   OnDestroy,
   ViewChild,
@@ -58,6 +59,7 @@ export class AllowlistManagementComponent implements OnInit, OnDestroy {
   addForm: FormGroup;
   isSubmitting = false;
 
+  @ViewChild('emailInput') emailInput?: ElementRef<HTMLInputElement>;
   @ViewChild(MatPaginator) paginator!: MatPaginator;
   @ViewChild(MatSort) sort!: MatSort;
 
@@ -122,6 +124,12 @@ export class AllowlistManagementComponent implements OnInit, OnDestroy {
   applyFilter(event: Event): void {
     const value = (event.target as HTMLInputElement).value.trim().toLowerCase();
     this.dataSource.filter = value;
+  }
+
+  focusAddUserForm(): void {
+    if (this.emailInput?.nativeElement) {
+      this.emailInput.nativeElement.focus();
+    }
   }
 
   async onAdd(): Promise<void> {
