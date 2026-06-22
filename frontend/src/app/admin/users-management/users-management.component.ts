@@ -22,6 +22,7 @@ import {
   Inject,
   PLATFORM_ID,
 } from '@angular/core';
+import {FormBuilder, FormGroup, Validators} from '@angular/forms';
 import {MatTableDataSource} from '@angular/material/table';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort} from '@angular/material/sort';
@@ -34,6 +35,10 @@ import {UserFormComponent} from './user-form.component';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {UserModel, UserRolesEnum} from '../../common/models/user.model';
 import {
+  AllowlistEntry,
+  AllowlistService,
+} from '../allowlist-management/allowlist.service';
+import {
   handleErrorSnackbar,
   handleSuccessSnackbar,
 } from '../../utils/handleMessageSnackbar';
@@ -45,6 +50,14 @@ import {ConfirmationDialogComponent} from '../../common/components/confirmation-
   styleUrls: ['./users-management.component.scss'],
 })
 export class UsersManagementComponent implements OnInit, OnDestroy {
+  accessColumns: string[] = [
+    'type',
+    'value',
+    'notes',
+    'status',
+    'added',
+    'accessActions',
+  ];
   displayedColumns: string[] = [
     'picture',
     'name',
@@ -56,9 +69,14 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
   ];
   dataSource: MatTableDataSource<UserModel> =
     new MatTableDataSource<UserModel>();
+  accessEntries: AllowlistEntry[] = [];
   isLoading = true;
+  isAccessLoading = false;
+  isAccessSubmitting = false;
   errorLoadingUsers: string | null = null;
+  errorLoadingAccess: string | null = null;
   lastResponse: PaginatedResponse | undefined;
+  accessForm: FormGroup;
 
   // --- Pagination State ---
   totalUsers = 0;
@@ -77,10 +95,21 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
 
   constructor(
     private userService: UserService,
+    private allowlistService: AllowlistService,
+    private fb: FormBuilder,
     public dialog: MatDialog,
     private _snackBar: MatSnackBar,
     @Inject(PLATFORM_ID) private platformId: Object,
-  ) {}
+  ) {
+    this.accessForm = this.fb.group(
+      {
+        email: ['', [Validators.email]],
+        domain: [''],
+        notes: [''],
+      },
+      {validators: this.atLeastOneValidator},
+    );
+  }
 
   ngOnInit(): void {
     if (isPlatformBrowser(this.platformId)) {
@@ -89,6 +118,7 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
         this.currentUserId = JSON.parse(userDetailsStr).id || null;
       }
       void this.fetchPage(0);
+      void this.loadAccessEntries();
     }
 
     // Debounce filter input to avoid excessive Firestore reads
@@ -113,6 +143,12 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
       return;
     }
     void this.fetchPage(event.pageIndex);
+  }
+
+  private atLeastOneValidator(group: FormGroup): {[key: string]: boolean} | null {
+    const email = group.get('email')?.value?.trim();
+    const domain = group.get('domain')?.value?.trim();
+    return email || domain ? null : {atLeastOne: true};
   }
 
   async fetchPage(targetPageIndex: number) {
@@ -141,6 +177,23 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
     }
   }
 
+  async loadAccessEntries(): Promise<void> {
+    this.isAccessLoading = true;
+    this.errorLoadingAccess = null;
+
+    try {
+      this.accessEntries = await firstValueFrom(
+        this.allowlistService.list(false),
+        {defaultValue: []},
+      );
+    } catch (err) {
+      this.errorLoadingAccess = 'Failed to load access list.';
+      console.error(err);
+    } finally {
+      this.isAccessLoading = false;
+    }
+  }
+
   applyFilter(event: Event): void {
     const filterValue = (event.target as HTMLInputElement).value;
     this.filterSubject.next(filterValue.trim().toLowerCase());
@@ -157,6 +210,80 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
   onIncludeDeletedChange(checked: boolean) {
     this.includeDeleted = checked;
     this.resetPaginationAndFetch();
+  }
+
+  async onAddAccess(): Promise<void> {
+    if (this.accessForm.invalid) return;
+
+    this.isAccessSubmitting = true;
+    const {email, domain, notes} = this.accessForm.value;
+    const dto: {email?: string; domain?: string; notes?: string} = {
+      notes: notes?.trim() ?? '',
+    };
+
+    if (email?.trim()) dto.email = email.trim().toLowerCase();
+    if (domain?.trim()) dto.domain = domain.trim().toLowerCase();
+
+    try {
+      await firstValueFrom(this.allowlistService.create(dto));
+      handleSuccessSnackbar(this._snackBar, 'Access entry added successfully.');
+      this.accessForm.reset();
+      await this.loadAccessEntries();
+    } catch (err) {
+      handleErrorSnackbar(this._snackBar, err, 'Add access entry');
+    } finally {
+      this.isAccessSubmitting = false;
+    }
+  }
+
+  toggleAccessEntry(entry: AllowlistEntry): void {
+    const action = entry.isActive ? 'Deactivate' : 'Reactivate';
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: '400px',
+      data: {
+        title: `${action} access entry?`,
+        message: `${action} "${this.entryLabel(entry)}"?`,
+      },
+    });
+
+    dialogRef.afterClosed().subscribe(async result => {
+      if (!result) return;
+
+      try {
+        await firstValueFrom(
+          this.allowlistService.update(entry.id, {isActive: !entry.isActive}),
+        );
+        handleSuccessSnackbar(
+          this._snackBar,
+          `Access entry ${action.toLowerCase()}d successfully!`,
+        );
+        await this.loadAccessEntries();
+      } catch (err) {
+        handleErrorSnackbar(this._snackBar, err, action);
+      }
+    });
+  }
+
+  deleteAccessEntry(entry: AllowlistEntry): void {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: '400px',
+      data: {
+        title: 'Delete access entry?',
+        message: `Permanently delete "${this.entryLabel(entry)}"?`,
+      },
+    });
+
+    dialogRef.afterClosed().subscribe(async result => {
+      if (!result) return;
+
+      try {
+        await firstValueFrom(this.allowlistService.delete(entry.id));
+        handleSuccessSnackbar(this._snackBar, 'Access entry deleted successfully!');
+        await this.loadAccessEntries();
+      } catch (err) {
+        handleErrorSnackbar(this._snackBar, err, 'Delete access entry');
+      }
+    });
   }
 
   async restoreUser(userId: string): Promise<void> {
@@ -244,5 +371,15 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
         // It's good practice to have a default style
         return '!bg-gray-500/20 !text-gray-300';
     }
+  }
+
+  entryLabel(entry: AllowlistEntry): string {
+    if (entry.email && entry.domain) return `${entry.email} / ${entry.domain}`;
+    return entry.email ?? entry.domain ?? '—';
+  }
+
+  entryType(entry: AllowlistEntry): string {
+    if (entry.email && entry.domain) return 'Email + Domain';
+    return entry.email ? 'Email' : 'Domain';
   }
 }

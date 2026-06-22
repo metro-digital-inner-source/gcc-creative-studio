@@ -19,6 +19,129 @@
     <h1 class="text-3xl font-semibold">User Management</h1>
   </div>
 
+  <mat-card class="mb-6">
+    <mat-card-header>
+      <mat-card-title>Access List</mat-card-title>
+      <mat-card-subtitle>
+        Add allowed emails or domains here. People appear in the user table below after their first login.
+      </mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      <form [formGroup]="accessForm" (ngSubmit)="onAddAccess()" class="flex flex-wrap gap-4 items-start mt-4">
+        <mat-form-field appearance="outline" class="flex-1 min-w-[220px]">
+          <mat-label>User email</mat-label>
+          <mat-icon matPrefix class="mr-2">person</mat-icon>
+          <input matInput formControlName="email" placeholder="user@company.com" autocomplete="off" />
+          <mat-error *ngIf="accessForm.get('email')?.hasError('email')">
+            Enter a valid email address.
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="flex-1 min-w-[220px]">
+          <mat-label>Domain</mat-label>
+          <mat-icon matPrefix class="mr-2">domain</mat-icon>
+          <input matInput formControlName="domain" placeholder="company.com" autocomplete="off" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="flex-[2] min-w-[220px]">
+          <mat-label>Notes</mat-label>
+          <input matInput formControlName="notes" placeholder="Optional note" />
+        </mat-form-field>
+
+        <div class="flex items-center pt-2">
+          <button mat-raised-button color="primary" type="submit" [disabled]="accessForm.invalid || isAccessSubmitting">
+            <mat-icon>person_add</mat-icon>
+            Add User
+          </button>
+        </div>
+      </form>
+
+      <mat-hint
+        *ngIf="accessForm.hasError('atLeastOne') && accessForm.dirty"
+        class="text-red-500 text-sm mt-1 block"
+      >
+        Provide at least an email or a domain.
+      </mat-hint>
+
+      <div *ngIf="isAccessLoading" class="flex justify-center items-center py-6">
+        <mat-spinner diameter="36"></mat-spinner>
+      </div>
+
+      <div
+        *ngIf="errorLoadingAccess && !isAccessLoading"
+        class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 mt-4"
+        role="alert"
+      >
+        <strong class="font-bold">Error! </strong>
+        <span class="block sm:inline">{{ errorLoadingAccess }}</span>
+      </div>
+
+      <div *ngIf="!isAccessLoading && !errorLoadingAccess" class="mat-elevation-z4 rounded-lg overflow-auto mt-4">
+        <table mat-table [dataSource]="accessEntries" class="w-full">
+          <ng-container matColumnDef="type">
+            <th mat-header-cell *matHeaderCellDef>Type</th>
+            <td mat-cell *matCellDef="let entry">{{ entryType(entry) }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="value">
+            <th mat-header-cell *matHeaderCellDef>Email / Domain</th>
+            <td mat-cell *matCellDef="let entry">{{ entryLabel(entry) }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="notes">
+            <th mat-header-cell *matHeaderCellDef>Notes</th>
+            <td mat-cell *matCellDef="let entry">{{ entry.notes || '—' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let entry">
+              <mat-chip [class]="entry.isActive ? '!bg-green-500/20 !text-green-300' : '!bg-gray-500/20 !text-gray-400'">
+                {{ entry.isActive ? 'Active' : 'Inactive' }}
+              </mat-chip>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="added">
+            <th mat-header-cell *matHeaderCellDef>Added</th>
+            <td mat-cell *matCellDef="let entry">{{ entry.createdAt | date: 'mediumDate' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="accessActions">
+            <th mat-header-cell *matHeaderCellDef class="!text-right !pr-4">Actions</th>
+            <td mat-cell *matCellDef="let entry" class="text-right pr-2">
+              <button
+                mat-icon-button
+                [matTooltip]="entry.isActive ? 'Deactivate entry' : 'Reactivate entry'"
+                (click)="toggleAccessEntry(entry)"
+              >
+                <mat-icon>{{ entry.isActive ? 'block' : 'check_circle' }}</mat-icon>
+              </button>
+              <button
+                mat-icon-button
+                color="warn"
+                matTooltip="Delete entry"
+                (click)="deleteAccessEntry(entry)"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="accessColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: accessColumns" [class.opacity-50]="!row.isActive"></tr>
+
+          <tr class="mat-row" *matNoDataRow>
+            <td class="mat-cell text-center py-4" [attr.colspan]="accessColumns.length">
+              No access entries yet. Add one above to grant access before first login.
+            </td>
+          </tr>
+        </table>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
   <!-- Filter & Include Deleted -->
   <div class="flex gap-4 items-center mb-4">
     <mat-form-field appearance="outline" class="flex-grow !mb-0">
