@@ -1,7 +1,7 @@
 """add_allowlist_table
 
 Revision ID: add_allowlist_001
-Revises: ae0287db1562
+Revises: 5c8041789c36
 Create Date: 2025-06-21 00:00:00.000000
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "add_allowlist_001"
-down_revision = "ae0287db1562"  # Latest migration
+down_revision = "5c8041789c36"
 branch_labels = None
 depends_on = None
 
