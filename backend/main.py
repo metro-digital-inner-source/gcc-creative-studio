@@ -117,6 +117,18 @@ async def lifespan(app: FastAPI):
         # We might want to stop startup here if migrations fail
         raise e
 
+    # Promote ADMIN_USER_EMAIL to admin role (idempotent — safe on every startup)
+    try:
+        from src.config.config_service import config_service as _cfg
+        if _cfg.ADMIN_USER_EMAIL and _cfg.ADMIN_USER_EMAIL != "system":
+            from bootstrap.bootstrap import ensure_admin_user_exists
+            from src.database import async_session_local
+            async with async_session_local() as _db:
+                await ensure_admin_user_exists(_db)
+            logger.info("Admin user check completed.")
+    except Exception as e:
+        logger.warning(f"Admin user promotion skipped: {e}")
+
     logger.info("Creating ThreadPoolExecutor...")
     # Create the pool and attach it to the app's state
     app.state.executor = ThreadPoolExecutor(max_workers=4)
