@@ -29,6 +29,8 @@ from src.config.config_service import config_service
 from src.users.user_model import UserModel, UserRoleEnum
 from src.users.user_service import UserService
 
+from src.allowlist.allowlist_service import AllowlistService
+
 # Initialize the scheme without auto_error so we can handle fallback internal auth
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
@@ -40,6 +42,7 @@ async def get_current_user(
     request: Request,
     token: str | None = Depends(oauth2_scheme),
     user_service: UserService = Depends(UserService),
+    allowlist_service: AllowlistService = Depends(AllowlistService),
 ) -> UserModel:
     """Dependency that handles the entire authentication and user
     provisioning flow. Supports standard token or internal agent key auth.
@@ -110,28 +113,32 @@ async def get_current_user(
                 ),
             )
 
+        email = email.lower().strip()
+        if token_info_hd:
+            token_info_hd = token_info_hd.lower().strip()
+
         # Check if user is allowed by email or organization.
         # Priority: 1) DB-backed allowlist, 2) Environment variables (fallback)
         is_allowed = False
+        has_env_restrictions = bool(
+            config_service.ALLOWED_EMAILS or config_service.ALLOWED_ORGS
+        )
+        db_check_failed = False
 
         # 1. Check DB-backed allowlist first
+        email_parts = email.split("@") if email else []
+        email_domain = email_parts[1] if len(email_parts) > 1 else None
         try:
-            from src.allowlist.allowlist_service import AllowlistService
-            
-            allowlist_service = AllowlistService(allowlist_repo=Depends())
-            # Extract domain from email (e.g., example.com from user@example.com)
-            email_parts = email.split("@") if email else []
-            email_domain = email_parts[1] if len(email_parts) > 1 else None
-            
             is_allowed = await allowlist_service.check_email_allowed(
                 email, email_domain
             )
         except Exception as e:
-            logger.debug(
-                f"Could not check DB allowlist (may not be initialized yet): {e}"
+            db_check_failed = True
+            logger.warning(
+                "DB allowlist check failed, falling back to env vars: %s", e
             )
 
-        # 2. Fall back to environment variables if DB check didn't allow
+        # 2. Fall back to environment variables if DB check did not allow
         if not is_allowed and config_service.ALLOWED_EMAILS:
             if email in config_service.ALLOWED_EMAILS:
                 is_allowed = True
@@ -140,11 +147,20 @@ async def get_current_user(
             if token_info_hd and token_info_hd in config_service.ALLOWED_ORGS:
                 is_allowed = True
 
-        # If at least one restriction is configured and user is not allowed, reject.
-        # Note: We check if DB allowlist is in use OR env vars are configured
-        if (
-            config_service.ALLOWED_EMAILS or config_service.ALLOWED_ORGS
-        ) and not is_allowed:
+        has_db_restrictions = False
+        if not is_allowed and not has_env_restrictions:
+            if db_check_failed:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=(
+                        "Authorization service temporarily unavailable. "
+                        "Please try again shortly."
+                    ),
+                )
+            has_db_restrictions = await allowlist_service.has_active_entries()
+
+        # Reject when any restriction source is active and the user is not allowed.
+        if (has_env_restrictions or has_db_restrictions) and not is_allowed:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User is not authorized to access this application.",

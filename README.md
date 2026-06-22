@@ -65,6 +65,25 @@ To redeploy the latest changes to Creative Studio, simply sync your forked repos
 
 The Cloud Build triggers will automatically detect the new code changes and start the process to redeploy the application (taking approximately 5 minutes).
 
+### Cloud Build Config Clarification
+
+To avoid CI/CD confusion, use the trigger-managed build configs below as the source of truth:
+
+- Backend deploy trigger uses `backend/cloudbuild.yaml`.
+- Frontend deploy trigger uses `frontend/cloudbuild-deploy.yaml`.
+- `frontend/cloudbuild.yaml` is a wrapper/alternate pipeline and is not the default frontend deploy trigger target.
+
+If you need to deploy the frontend from a feature branch before merge, run the existing frontend trigger manually:
+
+```bash
+gcloud builds triggers run cf-genaistudi-genai-studio--gv-trigger \
+  --project=cf-genaistudi-genai-studio--gv \
+  --region=europe-west3 \
+  --branch=feature/your-branch
+```
+
+Prefer trigger-based runs over ad hoc direct build submits for frontend deploys so the expected service account and secret wiring are consistently applied.
+
 ![](./screenshots/github-sync-with-main.png)
 
 *💡 Tip: If your fork is behind the upstream repository, you will see a **"Sync fork"** or **"Update branch"** button in this section that allows you to pull latest changes automatically with one click.*

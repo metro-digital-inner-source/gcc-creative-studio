@@ -7,7 +7,15 @@ Scope: Documentation snapshot for current deployment path
 ## Current Baseline
 
 - Backend stack is provisioned and routable in dev.
-- Frontend login was fixed in code by scoping auth token injection to backend API requests only.
+- Frontend login regression from the latest deployment has been fixed in code:
+  - Auth token injection remains scoped to backend API requests only.
+  - The login flow no longer gets torn down by a forced logout during pre-login/background requests.
+  - Backend allowlist lookup now uses proper FastAPI dependency injection.
+- **Allowlist enforcement is now hardened and fail-closed:**
+  - DB-only allowlist enforces access control even when env-var restrictions are empty.
+  - Authorization fails safely (503) if DB checks fail without env fallback.
+  - Case-insensitive email/domain/org comparisons prevent bypass via case variation.
+  - Comprehensive unit tests validate DB-only, env fallback, and fail-closed paths.
 - Terraform/GitHub automation still depends on organization IAM and GitHub connection setup.
 
 ## Confirmed Working Components
@@ -30,6 +38,10 @@ Scope: Documentation snapshot for current deployment path
 3. Deploy backend infra and backend service.
 4. Deploy frontend trigger/build to Firebase Hosting.
 5. Run smoke checks on login and authenticated backend API requests.
+
+## Verification Note
+
+- After redeploying the fixed code, validate that login succeeds from a fresh browser session and that authenticated API calls no longer trigger the `User session is not valid or has expired. 2` error.
 
 ## Quick Verification Commands
 

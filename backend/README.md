@@ -46,6 +46,26 @@ GOOGLE_TOKEN_AUDIENCE="XXXX-XXXXXXXXXXX.apps.googleusercontent.com"
 IDENTITY_PLATFORM_ALLOWED_ORGS=""
 ```
 
+### User Access Control: Allowlist Enforcement
+
+**Access is enforced in priority order:**
+
+1. **Database-backed allowlist** (if active entries exist):
+   - Only users with email or domain in `AllowlistEntry` table (with `is_active=true`) can authenticate.
+   - Managed via admin-only endpoints: `POST /api/admin/allowlist`.
+
+2. **Environment variables** (fallback, if DB allowlist is empty):
+   - `ALLOWED_EMAILS` — comma-separated list of authorized email addresses.
+   - `IDENTITY_PLATFORM_ALLOWED_ORGS` — comma-separated list of authorized Google organization domains (from token's `hd` claim).
+
+3. **Open access** (if both DB and env restrictions are empty):
+   - Any successfully authenticated user can log in and is auto-provisioned with `user` role.
+
+**Key behavior:**
+- Comparisons are **case-insensitive** for both email and domain.
+- If DB allowlist check fails and no env fallback is configured, auth returns `503 Service Unavailable` (fail-closed).
+- DB-backed allowlist is preferred over env vars for new deployments; env vars remain for backward compatibility.
+
 ### 2. Running the Application
 
 We use Docker Compose to run the application locally. Please refer to the [Development Guide](../DEVELOPMENT.md) for detailed instructions on how to start the services.

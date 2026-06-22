@@ -207,6 +207,10 @@ class AllowlistService:
         # Try database check first (most accurate)
         return await self.allowlist_repo.check_allowed(email, domain)
 
+    async def has_active_entries(self) -> bool:
+        """Return whether the DB-backed allowlist is currently in use."""
+        return await self.allowlist_repo.has_active_entries()
+
     async def list_allowlist_entries(
         self, active_only: bool = True
     ) -> list[AllowlistEntryModel]:

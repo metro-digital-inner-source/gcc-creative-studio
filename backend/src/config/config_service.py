@@ -141,7 +141,7 @@ class ConfigService(BaseSettings):
     @property
     def ALLOWED_ORGS(self) -> set[str]:
         return set(
-            org.strip()
+            org.strip().lower()
             for org in self.ALLOWED_ORGS_STR.split(",")
             if org.strip()
         )
@@ -150,7 +150,7 @@ class ConfigService(BaseSettings):
     @property
     def ALLOWED_EMAILS(self) -> set[str]:
         return set(
-            email.strip()
+            email.strip().lower()
             for email in self.ALLOWED_EMAILS_STR.split(",")
             if email.strip()
         )

@@ -44,17 +44,44 @@ def fixture_mock_request():
     return MockRequest()
 
 
+@pytest.fixture(autouse=True)
+def fixture_reset_config_service():
+    original_environment = config_service.ENVIRONMENT
+    original_allowed_orgs = config_service.ALLOWED_ORGS_STR
+    original_allowed_emails = config_service.ALLOWED_EMAILS_STR
+    yield
+    config_service.ENVIRONMENT = original_environment
+    config_service.ALLOWED_ORGS_STR = original_allowed_orgs
+    config_service.ALLOWED_EMAILS_STR = original_allowed_emails
+
+
+@pytest.fixture(name="mock_allowlist_service")
+def fixture_mock_allowlist_service():
+    service = AsyncMock()
+    service.check_email_allowed.return_value = False
+    service.has_active_entries.return_value = False
+    return service
+
+
 class TestGetCurrentUser:
     """Tests for get_current_user dependency."""
 
     @pytest.mark.anyio
     @patch("src.auth.auth_guard.auth.verify_id_token")
     async def test_get_current_user_local_success(
-        self, mock_verify, mock_user_service, mock_request
+        self,
+        mock_verify,
+        mock_user_service,
+        mock_request,
+        mock_allowlist_service,
     ):
         # Setup: Local environment
         config_service.ENVIRONMENT = "local"
         config_service.ALLOWED_ORGS_STR = ""
+        config_service.ALLOWED_EMAILS_STR = ""
+
+        mock_allowlist_service.check_email_allowed.return_value = False
+        mock_allowlist_service.has_active_entries.return_value = False
 
         # Mock token verification
         mock_verify.return_value = {
@@ -68,6 +95,7 @@ class TestGetCurrentUser:
             request=mock_request,
             token="valid_token",
             user_service=mock_user_service,
+            allowlist_service=mock_allowlist_service,
         )
 
         assert user.email == "test@example.com"
@@ -81,9 +109,15 @@ class TestGetCurrentUser:
     @pytest.mark.anyio
     @patch("src.auth.auth_guard.auth.verify_id_token")
     async def test_get_current_user_no_email(
-        self, mock_verify, mock_user_service, mock_request
+        self,
+        mock_verify,
+        mock_user_service,
+        mock_request,
+        mock_allowlist_service,
     ):
         config_service.ENVIRONMENT = "local"
+        config_service.ALLOWED_ORGS_STR = ""
+        config_service.ALLOWED_EMAILS_STR = ""
         mock_verify.return_value = {"name": "Test User"}  # Missing email
 
         with pytest.raises(HTTPException) as exc_info:
@@ -91,6 +125,7 @@ class TestGetCurrentUser:
                 request=mock_request,
                 token="valid_token",
                 user_service=mock_user_service,
+                allowlist_service=mock_allowlist_service,
             )
 
         assert exc_info.value.status_code == 403
@@ -99,10 +134,16 @@ class TestGetCurrentUser:
     @pytest.mark.anyio
     @patch("src.auth.auth_guard.auth.verify_id_token")
     async def test_get_current_user_allowed_orgs_fail(
-        self, mock_verify, mock_user_service, mock_request
+        self,
+        mock_verify,
+        mock_user_service,
+        mock_request,
+        mock_allowlist_service,
     ):
         config_service.ENVIRONMENT = "local"
         config_service.ALLOWED_ORGS_STR = "allowed.com"
+        config_service.ALLOWED_EMAILS_STR = ""
+        mock_allowlist_service.check_email_allowed.return_value = False
 
         mock_verify.return_value = {
             "email": "test@example.com",
@@ -115,6 +156,7 @@ class TestGetCurrentUser:
                 request=mock_request,
                 token="valid_token",
                 user_service=mock_user_service,
+                allowlist_service=mock_allowlist_service,
             )
 
         assert exc_info.value.status_code == 401
@@ -122,6 +164,164 @@ class TestGetCurrentUser:
             "User is not authorized to access this application."
             in exc_info.value.detail
         )
+
+    @pytest.mark.anyio
+    @patch("src.auth.auth_guard.auth.verify_id_token")
+    async def test_get_current_user_db_allowlist_only_rejects_unlisted_user(
+        self,
+        mock_verify,
+        mock_user_service,
+        mock_request,
+        mock_allowlist_service,
+    ):
+        config_service.ENVIRONMENT = "local"
+        config_service.ALLOWED_ORGS_STR = ""
+        config_service.ALLOWED_EMAILS_STR = ""
+        mock_allowlist_service.check_email_allowed.return_value = False
+        mock_allowlist_service.has_active_entries.return_value = True
+
+        mock_verify.return_value = {
+            "email": "test@example.com",
+            "name": "Test User",
+            "hd": "example.com",
+        }
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user(
+                request=mock_request,
+                token="valid_token",
+                user_service=mock_user_service,
+                allowlist_service=mock_allowlist_service,
+            )
+
+        assert exc_info.value.status_code == 401
+        mock_user_service.create_user_if_not_exists.assert_not_called()
+
+    @pytest.mark.anyio
+    @patch("src.auth.auth_guard.auth.verify_id_token")
+    async def test_get_current_user_db_allowlist_only_allows_listed_user(
+        self,
+        mock_verify,
+        mock_user_service,
+        mock_request,
+        mock_allowlist_service,
+    ):
+        config_service.ENVIRONMENT = "local"
+        config_service.ALLOWED_ORGS_STR = ""
+        config_service.ALLOWED_EMAILS_STR = ""
+        mock_allowlist_service.check_email_allowed.return_value = True
+
+        mock_verify.return_value = {
+            "email": "test@example.com",
+            "name": "Test User",
+            "picture": "http://example.com/pic.jpg",
+            "hd": "example.com",
+        }
+
+        user = await get_current_user(
+            request=mock_request,
+            token="valid_token",
+            user_service=mock_user_service,
+            allowlist_service=mock_allowlist_service,
+        )
+
+        assert user.email == "test@example.com"
+        mock_allowlist_service.has_active_entries.assert_not_called()
+
+    @pytest.mark.anyio
+    @patch("src.auth.auth_guard.auth.verify_id_token")
+    async def test_get_current_user_env_fallback_allows_matching_email(
+        self,
+        mock_verify,
+        mock_user_service,
+        mock_request,
+        mock_allowlist_service,
+    ):
+        config_service.ENVIRONMENT = "local"
+        config_service.ALLOWED_ORGS_STR = ""
+        config_service.ALLOWED_EMAILS_STR = "test@example.com"
+        mock_allowlist_service.check_email_allowed.return_value = False
+
+        mock_verify.return_value = {
+            "email": "test@example.com",
+            "name": "Test User",
+            "picture": "http://example.com/pic.jpg",
+            "hd": "example.com",
+        }
+
+        user = await get_current_user(
+            request=mock_request,
+            token="valid_token",
+            user_service=mock_user_service,
+            allowlist_service=mock_allowlist_service,
+        )
+
+        assert user.email == "test@example.com"
+        mock_allowlist_service.has_active_entries.assert_not_called()
+
+    @pytest.mark.anyio
+    @patch("src.auth.auth_guard.auth.verify_id_token")
+    async def test_get_current_user_env_fallback_is_case_insensitive(
+        self,
+        mock_verify,
+        mock_user_service,
+        mock_request,
+        mock_allowlist_service,
+    ):
+        config_service.ENVIRONMENT = "local"
+        config_service.ALLOWED_ORGS_STR = ""
+        config_service.ALLOWED_EMAILS_STR = "Test@Example.com"
+        mock_allowlist_service.check_email_allowed.return_value = False
+
+        mock_verify.return_value = {
+            "email": "TEST@EXAMPLE.COM",
+            "name": "Test User",
+            "picture": "http://example.com/pic.jpg",
+            "hd": "EXAMPLE.COM",
+        }
+
+        user = await get_current_user(
+            request=mock_request,
+            token="valid_token",
+            user_service=mock_user_service,
+            allowlist_service=mock_allowlist_service,
+        )
+
+        assert user.email == "test@example.com"
+
+    @pytest.mark.anyio
+    @patch("src.auth.auth_guard.auth.verify_id_token")
+    async def test_get_current_user_db_check_failure_without_env_fails_closed(
+        self,
+        mock_verify,
+        mock_user_service,
+        mock_request,
+        mock_allowlist_service,
+    ):
+        config_service.ENVIRONMENT = "local"
+        config_service.ALLOWED_ORGS_STR = ""
+        config_service.ALLOWED_EMAILS_STR = ""
+        mock_allowlist_service.check_email_allowed.side_effect = RuntimeError(
+            "db unavailable"
+        )
+
+        mock_verify.return_value = {
+            "email": "test@example.com",
+            "name": "Test User",
+            "hd": "example.com",
+        }
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user(
+                request=mock_request,
+                token="valid_token",
+                user_service=mock_user_service,
+                allowlist_service=mock_allowlist_service,
+            )
+
+        assert exc_info.value.status_code == 503
+        assert "Authorization service temporarily unavailable" in exc_info.value.detail
+        mock_user_service.create_user_if_not_exists.assert_not_called()
 
 
 class TestRoleChecker:

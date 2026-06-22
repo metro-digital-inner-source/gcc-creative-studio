@@ -54,6 +54,14 @@ class AllowlistRepository(BaseRepository[AllowlistEntry, AllowlistEntryModel]):
             AllowlistEntryModel.model_validate(entry) for entry in entries
         ]
 
+    async def has_active_entries(self) -> bool:
+        """Return whether any active allowlist entries exist."""
+        query = select(AllowlistEntry.id).where(
+            AllowlistEntry.is_active == True
+        ).limit(1)
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none() is not None
+
     async def check_allowed(
         self, email: str, domain: str | None = None
     ) -> bool:
