@@ -76,6 +76,45 @@ In case there are infrastructure changes (e.g., new cloud resources or configura
   Your browser does not support the video tag. You can <a href="./screenshots/how_to_deploy_creative_studio.mp4">download the video here</a>.
 </video>
 
+## Local Development 🛠️
+
+**Want to develop locally with Docker?**
+
+We provide a complete local development environment that runs entirely on your machine and **does NOT affect cloud deployments**.
+
+### Quick Start (One Command)
+
+```bash
+# From repo root on develop branch
+./bootstrap-local.sh
+```
+
+This script will:
+- ✅ Build fresh Docker containers
+- ✅ Start all services (frontend, backend, postgres, adminer)
+- ✅ Run database migrations automatically
+- ✅ Display access URLs and health status
+
+### Access Your Local Environment
+
+- **Frontend**: http://localhost:4200
+- **Backend API**: http://localhost:9000/api
+- **Database UI (Adminer)**: http://localhost:8081
+- **PostgreSQL**: localhost:5432
+
+### Complete Guide
+
+For detailed setup instructions, environment configuration, troubleshooting, and development workflows, see:
+
+📖 **[LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md)** - Complete local development guide
+
+**Key highlights:**
+- Environment file configuration (`.env` for backend, `environment.development.ts` for frontend)
+- Browser popup setup for Firebase authentication
+- Database management and migrations
+- Troubleshooting common issues
+- Differences between local and cloud deployments
+
 ## System Architecture
 
 ![](./screenshots/creative-studio-architecture.png)
