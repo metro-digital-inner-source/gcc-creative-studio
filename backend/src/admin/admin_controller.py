@@ -132,3 +132,52 @@ async def cleanup_stuck_jobs(admin_service: AdminService = Depends()):
     """
     count = await admin_service.cleanup_stuck_jobs()
     return {"message": f"Cleaned up {count} stuck jobs", "count": count}
+
+
+# Group Management Endpoints
+
+@router.get("/groups")
+async def get_all_groups(admin_service: AdminService = Depends()):
+    """Retrieves all groups (admin view)."""
+    return await admin_service.get_all_groups()
+
+
+@router.post("/groups")
+async def create_group_admin(
+    name: str,
+    country_code: str | None = None,
+    admin_service: AdminService = Depends(),
+):
+    """Creates a new group (admin action)."""
+    return await admin_service.create_group_admin(name, country_code)
+
+
+@router.post("/groups/{group_id}/users")
+async def add_user_to_group(
+    group_id: int,
+    user_id: int,
+    role: str = "member",
+    admin_service: AdminService = Depends(),
+):
+    """Adds a user to a group (admin action)."""
+    return await admin_service.add_user_to_group(group_id, user_id, role)
+
+
+@router.get("/groups/usage-summary")
+async def get_group_usage_summary(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    admin_service: AdminService = Depends(),
+):
+    """Retrieves aggregate usage summary across all groups."""
+    return await admin_service.get_group_usage_summary(start_date, end_date)
+
+
+@router.get("/groups/usage-breakdown")
+async def get_group_usage_breakdown(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    admin_service: AdminService = Depends(),
+):
+    """Retrieves per-group usage breakdown."""
+    return await admin_service.get_group_usage_breakdown(start_date, end_date)
