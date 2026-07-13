@@ -57,6 +57,9 @@ import {SharedModule} from '../common/shared.module';
 import {MediaGalleryManagementComponent} from './media-gallery-management/media-gallery-management.component';
 import {TagsManagementComponent} from './tags-management/tags-management.component';
 import {AdminHomeComponent} from './admin-home/admin-home.component';
+import {GroupsManagementComponent} from './groups-management/groups-management.component';
+import {CreateGroupDialogComponent} from './groups-management/create-group-dialog/create-group-dialog.component';
+import {AddMemberDialogComponent} from './groups-management/add-member-dialog/add-member-dialog.component';
 
 @NgModule({
   declarations: [
@@ -71,6 +74,9 @@ import {AdminHomeComponent} from './admin-home/admin-home.component';
     MediaGalleryManagementComponent,
     TagsManagementComponent,
     AdminHomeComponent,
+    GroupsManagementComponent,
+    CreateGroupDialogComponent,
+    AddMemberDialogComponent,
   ],
   imports: [
     CommonModule,
