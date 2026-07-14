@@ -91,11 +91,26 @@ jobs:
         with:
           terraform_version: 1.9.0
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud (dev)
+        if: needs.detect-env.outputs.environment == 'dev'
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets[format('TF_WIF_PROVIDER_{0}', needs.detect-env.outputs.secret-suffix)] }}
-          service_account: ${{ secrets[format('TF_SA_EMAIL_{0}', needs.detect-env.outputs.secret-suffix)] }}
+          workload_identity_provider: ${{ secrets.TF_WIF_PROVIDER_DEV }}
+          service_account: ${{ secrets.TF_SA_EMAIL_DEV }}
+
+      - name: Authenticate to Google Cloud (pp)
+        if: needs.detect-env.outputs.environment == 'pp'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.TF_WIF_PROVIDER_PP }}
+          service_account: ${{ secrets.TF_SA_EMAIL_PP }}
+
+      - name: Authenticate to Google Cloud (prod)
+        if: needs.detect-env.outputs.environment == 'prod'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.TF_WIF_PROVIDER_PROD }}
+          service_account: ${{ secrets.TF_SA_EMAIL_PROD }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -156,11 +171,26 @@ jobs:
         with:
           terraform_version: 1.9.0
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud (dev)
+        if: needs.detect-env.outputs.environment == 'dev'
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets[format('TF_WIF_PROVIDER_{0}', needs.detect-env.outputs.secret-suffix)] }}
-          service_account: ${{ secrets[format('TF_SA_EMAIL_{0}', needs.detect-env.outputs.secret-suffix)] }}
+          workload_identity_provider: ${{ secrets.TF_WIF_PROVIDER_DEV }}
+          service_account: ${{ secrets.TF_SA_EMAIL_DEV }}
+
+      - name: Authenticate to Google Cloud (pp)
+        if: needs.detect-env.outputs.environment == 'pp'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.TF_WIF_PROVIDER_PP }}
+          service_account: ${{ secrets.TF_SA_EMAIL_PP }}
+
+      - name: Authenticate to Google Cloud (prod)
+        if: needs.detect-env.outputs.environment == 'prod'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.TF_WIF_PROVIDER_PROD }}
+          service_account: ${{ secrets.TF_SA_EMAIL_PROD }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -189,5 +219,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               commit_sha: context.sha,
-              body: `Terraform apply result for **${{ needs.detect-env.outputs.environment }}** (Project: ${{ needs.detect-env.outputs.gcp-project }}) on \\`${context.sha.slice(0, 7)}\\`.`
+              body: `Terraform apply result for **${{ needs.detect-env.outputs.environment }}** (Project: ${{ needs.detect-env.outputs.gcp-project }}).`
             });
