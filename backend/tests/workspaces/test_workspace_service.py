@@ -14,7 +14,7 @@
 """Tests for Workspace Service."""
 
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -101,6 +101,7 @@ class TestInviteUserToWorkspace:
         invite_dto = InviteUserDto(
             email="guest@example.com",
             role=WorkspaceRoleEnum.VIEWER,
+            group_id=1,
         )
 
         with pytest.raises(HTTPException) as exc_info:
@@ -124,6 +125,7 @@ class TestInviteUserToWorkspace:
         invite_dto = InviteUserDto(
             email="guest@example.com",
             role=WorkspaceRoleEnum.VIEWER,
+            group_id=1,
         )
 
         with pytest.raises(HTTPException) as exc_info:
@@ -151,6 +153,7 @@ class TestInviteUserToWorkspace:
         invite_dto = InviteUserDto(
             email="unknown@example.com",
             role=WorkspaceRoleEnum.VIEWER,
+            group_id=1,
         )
 
         result = await workspace_service.invite_user_to_workspace(
@@ -197,16 +200,27 @@ class TestInviteUserToWorkspace:
         invite_dto = InviteUserDto(
             email="guest@example.com",
             role=WorkspaceRoleEnum.VIEWER,
+            group_id=1,
         )
 
-        result = await workspace_service.invite_user_to_workspace(
-            1,
-            invite_dto,
-            mock_user,
-        )
+        mock_group = MagicMock(shared_workspace_id=2)
+        mock_group_repo = AsyncMock()
+        mock_group_repo.get_by_id_with_members.return_value = mock_group
+
+        with patch(
+            "src.workspaces.workspace_service.GroupRepository",
+            return_value=mock_group_repo,
+        ):
+            result = await workspace_service.invite_user_to_workspace(
+                1,
+                invite_dto,
+                mock_user,
+            )
 
         assert result == updated_workspace
-        mock_workspace_repo.add_member_to_workspace.assert_called_once()
+        assert mock_workspace_repo.add_member_to_workspace.call_count == 2
+        mock_group_repo.get_by_id_with_members.assert_called_once_with(1)
+        mock_group_repo.add_member.assert_called_once()
         mock_email_service.send_workspace_invitation_email.assert_called_once()
 
 

@@ -98,7 +98,11 @@ class TestInviteUser:
 
         response = api_client.post(
             "/api/workspaces/1/invites",
-            json={"email": "guest@example.com", "role": "viewer"},
+            json={
+                "email": "guest@example.com",
+                "role": "viewer",
+                "groupId": 1,
+            },
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -110,7 +114,11 @@ class TestInviteUser:
 
         response = api_client.post(
             "/api/workspaces/1/invites",
-            json={"email": "unknown@example.com", "role": "viewer"},
+            json={
+                "email": "unknown@example.com",
+                "role": "viewer",
+                "groupId": 1,
+            },
         )
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
