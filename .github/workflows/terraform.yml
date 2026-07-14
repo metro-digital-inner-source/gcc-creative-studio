@@ -43,6 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       environment: ${{ steps.detect.outputs.environment }}
+      secret-suffix: ${{ steps.detect.outputs.secret-suffix }}
       gcp-project: ${{ steps.detect.outputs.gcp-project }}
       tfvars-file: ${{ steps.detect.outputs.tfvars-file }}
       branch-name: ${{ steps.detect.outputs.branch-name }}
@@ -52,16 +53,19 @@ jobs:
         run: |
           if [[ "${{ github.base_ref }}" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "secret-suffix=PROD" >> $GITHUB_OUTPUT
             echo "gcp-project=cf-genaistudi-genai-studio--7u" >> $GITHUB_OUTPUT
             echo "tfvars-file=prod/prod.tfvars" >> $GITHUB_OUTPUT
             echo "branch-name=main" >> $GITHUB_OUTPUT
           elif [[ "${{ github.base_ref }}" == "test" || "${{ github.ref }}" == "refs/heads/test" ]]; then
             echo "environment=pp" >> $GITHUB_OUTPUT
+            echo "secret-suffix=PP" >> $GITHUB_OUTPUT
             echo "gcp-project=cf-genaistudi-genai-studio--vm" >> $GITHUB_OUTPUT
             echo "tfvars-file=pp/pp.tfvars" >> $GITHUB_OUTPUT
             echo "branch-name=test" >> $GITHUB_OUTPUT
           elif [[ "${{ github.base_ref }}" == "develop" || "${{ github.ref }}" == "refs/heads/develop" ]]; then
             echo "environment=dev" >> $GITHUB_OUTPUT
+            echo "secret-suffix=DEV" >> $GITHUB_OUTPUT
             echo "gcp-project=cf-genaistudi-genai-studio--gv" >> $GITHUB_OUTPUT
             echo "tfvars-file=dev/dev.tfvars" >> $GITHUB_OUTPUT
             echo "branch-name=develop" >> $GITHUB_OUTPUT
@@ -88,8 +92,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets[format('TF_WIF_PROVIDER_{0}', needs.detect-env.outputs.environment)] }}
-          service_account: ${{ secrets[format('TF_SA_EMAIL_{0}', needs.detect-env.outputs.environment)] }}
+          workload_identity_provider: ${{ secrets[format('TF_WIF_PROVIDER_{0}', needs.detect-env.outputs.secret-suffix)] }}
+          service_account: ${{ secrets[format('TF_SA_EMAIL_{0}', needs.detect-env.outputs.secret-suffix)] }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -153,8 +157,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets[format('TF_WIF_PROVIDER_{0}', needs.detect-env.outputs.environment)] }}
-          service_account: ${{ secrets[format('TF_SA_EMAIL_{0}', needs.detect-env.outputs.environment)] }}
+          workload_identity_provider: ${{ secrets[format('TF_WIF_PROVIDER_{0}', needs.detect-env.outputs.secret-suffix)] }}
+          service_account: ${{ secrets[format('TF_SA_EMAIL_{0}', needs.detect-env.outputs.secret-suffix)] }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -179,9 +183,9 @@ jobs:
         if: always()
         with:
           script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
+            github.rest.repos.createCommitComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `✅ Terraform applied to **${{ needs.detect-env.outputs.environment }}** environment (Project: ${{ needs.detect-env.outputs.gcp-project }})`
+              commit_sha: context.sha,
+              body: `Terraform apply result for **${{ needs.detect-env.outputs.environment }}** (Project: ${{ needs.detect-env.outputs.gcp-project }}) on \\`${context.sha.slice(0, 7)}\\`.`
             });
