@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from fastapi import Depends, HTTPException, status
 
 from src.common.email_service import EmailService
+from src.groups.repository.group_repository import GroupRepository
 from src.users.repository.user_repository import UserRepository
 from src.users.user_model import UserModel, UserRoleEnum
 from src.workspaces.dto.create_workspace_dto import CreateWorkspaceDto
@@ -109,38 +110,45 @@ class WorkspaceService:
             invited_user.id,
         )
 
+        if not updated_workspace:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to add user to workspace.",
+            )
+
         # 3.5. Add the user to the specified group
-        if updated_workspace:
-            try:
-                # Import here to avoid circular dependency
-                from src.groups.repository.group_repository import GroupRepository
-                from src.database import get_db
-                
-                # Get a db session and add the member directly
-                # This is safe since the inviting user is already authorized as admin/owner
-                db = self.workspace_repo.db  # Reuse the same db session
-                group_repo = GroupRepository(db)
-                await group_repo.add_member(
-                    invite_dto.group_id,
-                    invited_user.id,
-                    invite_dto.group_role,
-                )
-            except Exception as e:
-                # Log the error but don't fail the invitation if group assignment fails
-                # The user can be manually added to the group later
-                import logging
-                logging.error(
-                    f"Failed to add user {invited_user.id} to group {invite_dto.group_id}: {e}"
-                )
+        group_repo = GroupRepository(self.workspace_repo.db)
+        group = await group_repo.get_by_id_with_members(invite_dto.group_id)
+        if not group:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Group not found.",
+            )
+
+        await group_repo.add_member(
+            invite_dto.group_id,
+            invited_user.id,
+            invite_dto.group_role,
+        )
+
+        shared_workspace_member = WorkspaceMember(
+            user_id=invited_user.id,
+            email=invited_user.email,
+            role=WorkspaceRoleEnum.VIEWER,
+        )
+        await self.workspace_repo.add_member_to_workspace(
+            group.shared_workspace_id,
+            shared_workspace_member,
+            invited_user.id,
+        )
 
         # 4. Send an invitation email to the user.
-        if updated_workspace:
-            self.email_service.send_workspace_invitation_email(
-                recipient_email=invited_user.email,
-                inviter_name=current_user.name,
-                workspace_name=updated_workspace.name,
-                workspace_id=workspace_id,
-            )
+        self.email_service.send_workspace_invitation_email(
+            recipient_email=invited_user.email,
+            inviter_name=current_user.name,
+            workspace_name=updated_workspace.name,
+            workspace_id=workspace_id,
+        )
         return updated_workspace
 
     async def list_workspaces_for_user(
@@ -150,6 +158,10 @@ class WorkspaceService:
         1. All public workspaces.
         2. All private workspaces where the user is a member.
         """
+        is_system_admin = UserRoleEnum.ADMIN in user.roles
+        if is_system_admin:
+            return await self.workspace_repo.find_all(limit=1000, offset=0)
+
         # 1. Fetch all workspaces where the user is explicitly a member.
         private_workspaces = await self.workspace_repo.find_by_member_id(
             user.id
