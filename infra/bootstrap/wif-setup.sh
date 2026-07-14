@@ -141,16 +141,25 @@ else
 fi
 
 # Step 7: Create Workload Identity Binding
-echo "[7/8] Creating Workload Identity Binding for ${BRANCH}..."
-BINDING_NAME="${TF_SA_NAME}-${ENVIRONMENT}"
+echo "[7/8] Creating Workload Identity Binding for ${GITHUB_REPO_FULL}..."
+
+# Remove the legacy branch-conditional binding if it exists.
+LEGACY_BINDING_TITLE="${TF_SA_NAME}-${ENVIRONMENT}"
+LEGACY_CONDITION="expression=assertion.ref == 'refs/heads/${BRANCH}',title=${LEGACY_BINDING_TITLE}"
+
+gcloud iam service-accounts remove-iam-policy-binding "${TF_SA_EMAIL}" \
+  --project="${GCP_PROJECT_ID}" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/${WIF_POOL_RESOURCE}/attribute.repository/${GITHUB_REPO_FULL}" \
+  --condition="${LEGACY_CONDITION}" \
+  --quiet 2>/dev/null || true
 
 gcloud iam service-accounts add-iam-policy-binding "${TF_SA_EMAIL}" \
   --project="${GCP_PROJECT_ID}" \
   --role="roles/iam.workloadIdentityUser" \
   --member="principalSet://iam.googleapis.com/${WIF_POOL_RESOURCE}/attribute.repository/${GITHUB_REPO_FULL}" \
-  --condition="expression=assertion.ref == 'refs/heads/${BRANCH}',title=${BINDING_NAME}" \
   --quiet
-echo "  ✓ Binding created for branch: ${BRANCH}"
+echo "  ✓ Binding created for repository: ${GITHUB_REPO_FULL}"
 
 # Step 8: Output the configuration
 echo "[8/8] Configuration Summary"
