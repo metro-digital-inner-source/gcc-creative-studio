@@ -14,12 +14,14 @@
 
 
 from fastapi import Depends
+from sqlalchemy import func, select
 
+from src.config.config_service import config_service
 from src.common.dto.pagination_response_dto import PaginationResponseDto
 from src.users.dto.user_create_dto import UserCreateDto, UserUpdateRoleDto
 from src.users.dto.user_search_dto import UserSearchDto
 from src.users.repository.user_repository import UserRepository
-from src.users.user_model import UserModel, UserRoleEnum
+from src.users.user_model import User, UserModel, UserRoleEnum
 
 
 class UserService:
@@ -27,6 +29,30 @@ class UserService:
 
     def __init__(self, user_repo: UserRepository = Depends()):
         self.user_repo = user_repo
+
+    @staticmethod
+    def _role_name(role: UserRoleEnum | str) -> str:
+        return role.value if isinstance(role, UserRoleEnum) else str(role)
+
+    @classmethod
+    def _has_admin_role(cls, roles: list[UserRoleEnum | str]) -> bool:
+        return any(cls._role_name(role).lower() == "admin" for role in roles)
+
+    async def _should_bootstrap_admin(self, email: str) -> bool:
+        configured_admin = (config_service.ADMIN_USER_EMAIL or "").strip().lower()
+        # If explicitly configured, only that email gets auto-admin.
+        if configured_admin and configured_admin != "system":
+            return email.lower() == configured_admin
+
+        # Safety fallback for fresh environments: ensure at least one admin exists.
+        admin_query = (
+            select(func.count())
+            .select_from(User)
+            .where(User.roles.contains(["admin"]))
+        )
+        admin_count_result = await self.user_repo.db.execute(admin_query)
+        admin_count = admin_count_result.scalar() or 0
+        return admin_count == 0
 
     async def create_user_if_not_exists(
         self,
@@ -41,6 +67,15 @@ class UserService:
         existing_user = await self.user_repo.get_by_email(email)
 
         if existing_user:
+            if await self._should_bootstrap_admin(email) and not self._has_admin_role(
+                existing_user.roles
+            ):
+                updated_roles = [self._role_name(role) for role in existing_user.roles]
+                updated_roles.append(UserRoleEnum.ADMIN.value)
+                existing_user = await self.user_repo.update(
+                    existing_user.id,
+                    {"roles": updated_roles},
+                )
             return existing_user
 
         # 2. If the user does not exist, create a new User using UserCreateDto
@@ -57,6 +92,9 @@ class UserService:
         # We can pass a dict that includes roles.
         user_data = new_user_dto.model_dump()
         user_data["roles"] = [UserRoleEnum.USER]
+
+        if await self._should_bootstrap_admin(email):
+            user_data["roles"].append(UserRoleEnum.ADMIN)
 
         # 3. Call the repository's create() method
         return await self.user_repo.create(user_data)
