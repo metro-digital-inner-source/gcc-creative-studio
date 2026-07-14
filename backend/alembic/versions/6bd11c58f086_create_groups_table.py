@@ -15,7 +15,7 @@
 """create groups table
 
 Revision ID: 6bd11c58f086
-Revises: 5c8041789c36
+Revises: add_allowlist_001
 Create Date: 2026-07-14 00:16:13.540613
 
 """
@@ -27,7 +27,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '6bd11c58f086'
-down_revision: Union[str, None] = '5c8041789c36'
+down_revision: Union[str, None] = 'add_allowlist_001'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
