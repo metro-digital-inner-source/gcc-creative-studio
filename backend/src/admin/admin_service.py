@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fastapi import Depends
 from datetime import datetime, timedelta
+from fastapi import Depends
+
 from src.admin.repository.admin_repository import AdminRepository
 from src.admin.dto.admin_response_dto import (
     AdminOverviewStats,
@@ -25,6 +26,7 @@ from src.admin.dto.admin_response_dto import (
 )
 from src.groups.group_service import GroupService
 from src.groups.schema.group_model import GroupMemberRoleEnum
+from src.users.user_model import UserModel
 
 
 class AdminService:
@@ -100,45 +102,39 @@ class AdminService:
         """Gets all groups (admin view)."""
         return await self.group_service.get_all_groups_admin()
 
-    async def create_group_admin(self, name: str, country_code: str | None = None):
+    async def create_group_admin(
+        self,
+        name: str,
+        admin_user: UserModel,
+        country_code: str | None = None,
+    ):
         """Creates a new group as admin.
-        
-        Note: This uses a system user context. For production, we'd need to
-        inject the admin user making the request.
         """
-        from src.users.user_model import UserModel
-        # TODO: Use actual admin user from request context
-        # For now, create with system context
         from src.groups.dto.group_dto import CreateGroupRequest
-        
-        request = CreateGroupRequest(name=name, country_code=country_code)
-        # We need a creator for the workspace. Using a placeholder.
-        # In production, this would be the admin making the request
-        system_user = UserModel(
-            id=1,  # Assuming user ID 1 exists
-            email="admin@system",
-            name="System Admin",
-            roles=["admin"],
-        )
-        return await self.group_service.create_group(request, system_user)
 
-    async def add_user_to_group(self, group_id: int, user_id: int, role: str, admin_user: "UserModel"):
+        request = CreateGroupRequest(name=name, country_code=country_code)
+        return await self.group_service.create_group(request, admin_user)
+
+    async def add_user_to_group(
+        self,
+        group_id: int,
+        user_id: int,
+        role: str,
+        admin_user: UserModel,
+    ):
         """Adds a user to a group (admin action)."""
-        from src.groups.dto.group_request_dto import AddGroupMemberRequest
-        
         # Parse role
         try:
             member_role = GroupMemberRoleEnum(role)
         except ValueError:
             member_role = GroupMemberRoleEnum.MEMBER
-        
-        # Use the proper group service method which handles authorization
-        request = AddGroupMemberRequest(
-            user_id=user_id,
-            role=member_role
+
+        return await self.group_service.add_member_to_group(
+            group_id,
+            user_id,
+            member_role,
+            admin_user,
         )
-        return await self.group_service.add_member_to_group(group_id, request, admin_user)
-        return await self.group_service.group_repo.get_by_id_with_members(group_id)
 
     async def delete_group_admin(self, group_id: int) -> bool:
         """Deletes a group (admin action). Returns True if deleted, False if not found."""

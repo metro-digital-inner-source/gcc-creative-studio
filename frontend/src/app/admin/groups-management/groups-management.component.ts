@@ -175,20 +175,9 @@ export class GroupsManagementComponent implements OnInit {
 
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
-        this.addMember(group.id, result.userId, result.role);
-      }
-    });
-  }
-
-  addMember(groupId: number, userId: number, role: string): void {
-    this.groupService.addUserToGroup(groupId, userId, role).subscribe({
-      next: group => {
         handleSuccessSnackbar(this.snackBar, 'Member added successfully');
         this.loadGroups();
-      },
-      error: error => {
-        handleErrorSnackbar(this.snackBar, error, 'Failed to add member');
-      },
+      }
     });
   }
 

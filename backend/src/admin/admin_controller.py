@@ -147,9 +147,14 @@ async def create_group_admin(
     name: str,
     country_code: str | None = None,
     admin_service: AdminService = Depends(),
+    current_user: UserModel = Depends(get_current_user),
 ):
     """Creates a new group (admin action)."""
-    return await admin_service.create_group_admin(name, country_code)
+    return await admin_service.create_group_admin(
+        name,
+        current_user,
+        country_code,
+    )
 
 
 @router.post("/groups/{group_id}/users")

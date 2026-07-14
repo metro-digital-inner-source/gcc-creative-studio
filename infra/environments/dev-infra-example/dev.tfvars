@@ -26,6 +26,10 @@ be_env_vars = {
     ENVIRONMENT  = "development"
     GOOGLE_TOKEN_AUDIENCE = "YOUR_OAUTH_WEB_CLIENT_ID_HERE"
     IDENTITY_PLATFORM_ALLOWED_ORGS = "" # If empty then any org is allowed
+    # Keep dev open like local docker unless explicitly restricted.
+    ALLOWED_EMAILS = ""
+    # Empty means first-authenticated-user bootstrap logic decides initial admin.
+    ADMIN_USER_EMAIL = ""
   }
   production = {
     ENVIRONMENT  = "production"
