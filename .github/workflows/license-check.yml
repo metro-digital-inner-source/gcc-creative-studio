@@ -28,4 +28,4 @@ jobs:
 
       - name: Run addlicense check
         run: |
-          addlicense -check -c "Google LLC" -l apache $(find . -type f \( -name "*.py" -o -name "*.ts" -o -name "*.scss" -o -name "*.html" -o -name "*.css" -o -name "*.js" -o -name "*.sh" \) -not -path "*/node_modules/*" -not -path "*/.venv/*" -not -path "*/.git/*")
+          addlicense -check -c "Google LLC" -l apache $(find . -type f \( -name "*.py" -o -name "*.ts" -o -name "*.scss" -o -name "*.html" -o -name "*.css" -o -name "*.js" -o -name "*.sh" \) -not -path "*/node_modules/*" -not -path "*/.venv/*" -not -path "*/.git/*" -not -path "*/dist/*" -not -path "*/.angular/*" -not -path "*/.pytest_cache/*" -not -path "*/coverage/*" -not -path "*/__pycache__/*")
