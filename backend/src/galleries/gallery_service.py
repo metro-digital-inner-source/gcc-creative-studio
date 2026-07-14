@@ -208,7 +208,7 @@ class GalleryService:
             asyncio.to_thread(
                 self.iam_signer_credentials.generate_presigned_url, uri
             )
-            for uri in (item.thumbnail_uris or "")
+            for uri in (item.thumbnail_uris or [])
             if uri
         ]
 
@@ -278,6 +278,19 @@ class GalleryService:
         uris_to_sign = item.gcs_uris or []
         thumbnail_uris_to_sign = item.thumbnail_uris or []
 
+        # Log if we have no URIs to sign
+        if not uris_to_sign and not thumbnail_uris_to_sign:
+            logger.warning(
+                f"No URIs to sign for item {item.id} "
+                f"(type: {item.item_type}). "
+                f"gcs_uris: {item.gcs_uris}, "
+                f"thumbnail_uris: {item.thumbnail_uris}"
+            )
+            # Return early with empty arrays
+            item.presigned_urls = []
+            item.presigned_thumbnail_urls = []
+            return item
+
         # Create tasks
         url_tasks = [
             asyncio.to_thread(
@@ -295,10 +308,23 @@ class GalleryService:
             if uri
         ]
 
-        (presigned_urls, presigned_thumbnail_urls) = await asyncio.gather(
-            asyncio.gather(*url_tasks),
-            asyncio.gather(*thumbnail_tasks),
-        )
+        try:
+            (presigned_urls, presigned_thumbnail_urls) = await asyncio.gather(
+                asyncio.gather(*url_tasks),
+                asyncio.gather(*thumbnail_tasks),
+            )
+            
+            # Log success for debugging
+            logger.info(
+                f"Generated {len(presigned_urls)} presigned URLs and "
+                f"{len(presigned_thumbnail_urls)} thumbnail URLs for item {item.id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Error generating presigned URLs for item {item.id}: {e}"
+            )
+            presigned_urls = []
+            presigned_thumbnail_urls = []
 
         item.presigned_urls = presigned_urls
         item.presigned_thumbnail_urls = presigned_thumbnail_urls

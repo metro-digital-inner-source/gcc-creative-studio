@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, status
 
@@ -107,6 +108,30 @@ class WorkspaceService:
             new_member,
             invited_user.id,
         )
+
+        # 3.5. Add the user to the specified group
+        if updated_workspace:
+            try:
+                # Import here to avoid circular dependency
+                from src.groups.repository.group_repository import GroupRepository
+                from src.database import get_db
+                
+                # Get a db session and add the member directly
+                # This is safe since the inviting user is already authorized as admin/owner
+                db = self.workspace_repo.db  # Reuse the same db session
+                group_repo = GroupRepository(db)
+                await group_repo.add_member(
+                    invite_dto.group_id,
+                    invited_user.id,
+                    invite_dto.group_role,
+                )
+            except Exception as e:
+                # Log the error but don't fail the invitation if group assignment fails
+                # The user can be manually added to the group later
+                import logging
+                logging.error(
+                    f"Failed to add user {invited_user.id} to group {invite_dto.group_id}: {e}"
+                )
 
         # 4. Send an invitation email to the user.
         if updated_workspace:

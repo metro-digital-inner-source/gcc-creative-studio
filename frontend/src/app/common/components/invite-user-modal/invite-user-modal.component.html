@@ -14,9 +14,12 @@
  limitations under the License.
 -->
 
-<h1 mat-dialog-title>Invite to {{ data.workspaceName }}</h1>
+<h1 mat-dialog-title>
+  {{ data.adminMode ? 'Invite User to Platform' : 'Invite to ' + data.workspaceName }}
+</h1>
 <form [formGroup]="inviteForm" (ngSubmit)="dialogRef.close(inviteForm.value)">
   <div mat-dialog-content class="flex flex-col gap-4">
+    <!-- Email Field -->
     <mat-form-field appearance="fill">
       <mat-label>Email</mat-label>
       <input matInput formControlName="email" type="email" cdkFocusInitial />
@@ -27,18 +30,52 @@
         >Please enter a valid email</mat-error
       >
     </mat-form-field>
+
+    <!-- Workspace Selector (Admin Mode Only) -->
+    <mat-form-field appearance="fill" *ngIf="data.adminMode">
+      <mat-label>Workspace</mat-label>
+      <mat-select formControlName="workspaceId">
+        <mat-option *ngFor="let workspace of workspaces" [value]="workspace.id">
+          {{ workspace.name }}
+        </mat-option>
+      </mat-select>
+      <mat-error *ngIf="inviteForm.get('workspaceId')?.hasError('required')"
+        >Workspace is required</mat-error
+      >
+    </mat-form-field>
+
+    <!-- Role Field -->
     <mat-form-field appearance="fill">
-      <mat-label>Role</mat-label>
+      <mat-label>Workspace Role</mat-label>
       <mat-select formControlName="role">
         <mat-option *ngFor="let role of roles" [value]="role">{{
           role | titlecase
         }}</mat-option>
       </mat-select>
     </mat-form-field>
+
+    <!-- Group Selector (Always Required) -->
+    <mat-form-field appearance="fill">
+      <mat-label>Group</mat-label>
+      <mat-select formControlName="groupId">
+        <mat-option *ngFor="let group of groups" [value]="group.id">
+          {{ group.name }} ({{ group.countryCode || 'No country' }})
+        </mat-option>
+      </mat-select>
+      <mat-error *ngIf="inviteForm.get('groupId')?.hasError('required')"
+        >Group is required</mat-error
+      >
+    </mat-form-field>
+
+    <mat-progress-spinner
+      *ngIf="isLoading"
+      mode="indeterminate"
+      diameter="40"
+    ></mat-progress-spinner>
   </div>
   <div mat-dialog-actions>
     <button mat-button type="button" (click)="onNoClick()">Cancel</button>
-    <button mat-button type="submit" [disabled]="inviteForm.invalid">
+    <button mat-button type="submit" [disabled]="inviteForm.invalid || isLoading">
       Send Invitation
     </button>
   </div>

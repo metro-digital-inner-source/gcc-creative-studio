@@ -20,7 +20,6 @@ import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {AdminRoutingModule} from './admin-routing.module';
 import {AdminLayoutComponent} from './admin-layout/admin-layout.component';
 import {UsersManagementComponent} from './users-management/users-management.component';
-import {MediaTemplatesManagementComponent} from './media-templates-management/media-templates-management.component';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatListModule} from '@angular/material/list';
 import {MatIconModule} from '@angular/material/icon';
@@ -49,33 +48,28 @@ import {ScrollingModule} from '@angular/cdk/scrolling';
 import {MatProgressBarModule} from '@angular/material/progress-bar';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatNativeDateModule} from '@angular/material/core';
-import {MediaTemplateFormComponent} from './media-templates-management/media-template-form/media-template-form.component';
-import {SourceAssetsManagementComponent} from './source-assets-management/source-assets-management.component';
-import {SourceAssetFormComponent} from './source-assets-management/source-asset-form/source-asset-form.component';
-import {SourceAssetUploadFormComponent} from './source-assets-management/source-asset-upload-form/source-asset-upload-form.component';
 import {SharedModule} from '../common/shared.module';
-import {MediaGalleryManagementComponent} from './media-gallery-management/media-gallery-management.component';
-import {TagsManagementComponent} from './tags-management/tags-management.component';
 import {AdminHomeComponent} from './admin-home/admin-home.component';
+import {GroupsManagementComponent} from './groups-management/groups-management.component';
+import {CreateGroupDialogComponent} from './groups-management/create-group-dialog/create-group-dialog.component';
+import {AddMemberDialogComponent} from './groups-management/add-member-dialog/add-member-dialog.component';
+import {AdminDeprecatedModule} from './admin-deprecated.module';
 
 @NgModule({
   declarations: [
     AdminLayoutComponent,
     UsersManagementComponent,
-    MediaTemplatesManagementComponent,
     UserFormComponent,
-    MediaTemplateFormComponent,
-    SourceAssetsManagementComponent,
-    SourceAssetFormComponent,
-    SourceAssetUploadFormComponent,
-    MediaGalleryManagementComponent,
-    TagsManagementComponent,
     AdminHomeComponent,
+    GroupsManagementComponent,
+    CreateGroupDialogComponent,
+    AddMemberDialogComponent,
   ],
   imports: [
     CommonModule,
     SharedModule,
     AdminRoutingModule,
+    AdminDeprecatedModule,
     MatSidenavModule,
     MatListModule,
     MatPaginatorModule,

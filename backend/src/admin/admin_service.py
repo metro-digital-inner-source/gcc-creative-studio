@@ -23,11 +23,18 @@ from src.admin.dto.admin_response_dto import (
     AdminGenerationHealth,
     AdminMonthlyActiveUsers,
 )
+from src.groups.group_service import GroupService
+from src.groups.schema.group_model import GroupMemberRoleEnum
 
 
 class AdminService:
-    def __init__(self, admin_repo: AdminRepository = Depends()):
+    def __init__(
+        self,
+        admin_repo: AdminRepository = Depends(),
+        group_service: GroupService = Depends(),
+    ):
         self.admin_repo = admin_repo
+        self.group_service = group_service
 
     async def get_overview_stats(
         self, start_date: str | None = None, end_date: str | None = None
@@ -86,3 +93,75 @@ class AdminService:
 
     async def cleanup_stuck_jobs(self) -> int:
         return await self.admin_repo.cleanup_stuck_jobs()
+
+    # Group Management Methods
+
+    async def get_all_groups(self):
+        """Gets all groups (admin view)."""
+        return await self.group_service.get_all_groups_admin()
+
+    async def create_group_admin(self, name: str, country_code: str | None = None):
+        """Creates a new group as admin.
+        
+        Note: This uses a system user context. For production, we'd need to
+        inject the admin user making the request.
+        """
+        from src.users.user_model import UserModel
+        # TODO: Use actual admin user from request context
+        # For now, create with system context
+        from src.groups.dto.group_dto import CreateGroupRequest
+        
+        request = CreateGroupRequest(name=name, country_code=country_code)
+        # We need a creator for the workspace. Using a placeholder.
+        # In production, this would be the admin making the request
+        system_user = UserModel(
+            id=1,  # Assuming user ID 1 exists
+            email="admin@system",
+            name="System Admin",
+            roles=["admin"],
+        )
+        return await self.group_service.create_group(request, system_user)
+
+    async def add_user_to_group(self, group_id: int, user_id: int, role: str, admin_user: "UserModel"):
+        """Adds a user to a group (admin action)."""
+        from src.groups.dto.group_request_dto import AddGroupMemberRequest
+        
+        # Parse role
+        try:
+            member_role = GroupMemberRoleEnum(role)
+        except ValueError:
+            member_role = GroupMemberRoleEnum.MEMBER
+        
+        # Use the proper group service method which handles authorization
+        request = AddGroupMemberRequest(
+            user_id=user_id,
+            role=member_role
+        )
+        return await self.group_service.add_member_to_group(group_id, request, admin_user)
+        return await self.group_service.group_repo.get_by_id_with_members(group_id)
+
+    async def delete_group_admin(self, group_id: int) -> bool:
+        """Deletes a group (admin action). Returns True if deleted, False if not found."""
+        return await self.group_service.group_repo.delete_group(group_id)
+
+    async def get_group_usage_summary(
+        self, start_date: str | None = None, end_date: str | None = None
+    ):
+        """Gets aggregate usage summary."""
+        from datetime import date as date_type
+        
+        start = date_type.fromisoformat(start_date) if start_date else None
+        end = date_type.fromisoformat(end_date) if end_date else None
+        
+        return await self.group_service.get_usage_summary_admin(start, end)
+
+    async def get_group_usage_breakdown(
+        self, start_date: str | None = None, end_date: str | None = None
+    ):
+        """Gets per-group usage breakdown."""
+        from datetime import date as date_type
+        
+        start = date_type.fromisoformat(start_date) if start_date else None
+        end = date_type.fromisoformat(end_date) if end_date else None
+        
+        return await self.group_service.get_usage_breakdown_admin(start, end)

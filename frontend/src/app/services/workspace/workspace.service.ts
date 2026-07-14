@@ -41,10 +41,12 @@ export class WorkspaceService {
     workspaceId: number,
     email: string,
     role: WorkspaceRole,
+    groupId: number,
   ): Observable<void> {
     return this.http.post<void>(`${this.apiUrl}/${workspaceId}/invites`, {
       email,
       role,
+      groupId,
     });
   }
 }

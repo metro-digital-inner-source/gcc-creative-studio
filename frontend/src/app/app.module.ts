@@ -86,14 +86,15 @@ import {AssignTagsDialogComponent} from './common/components/assign-tags-dialog/
 import {SharedModule} from './common/shared.module';
 import {AddVoiceDialogComponent} from './components/add-voice-dialog/add-voice-dialog.component';
 import {FooterComponent} from './footer/footer.component';
-import {FunTemplatesComponent} from './fun-templates/fun-templates.component';
 import {MediaDetailComponent} from './gallery/media-detail/media-detail.component';
 import {MediaGalleryComponent} from './gallery/media-gallery/media-gallery.component';
+import {GroupGalleryComponent} from './gallery/group-gallery/group-gallery.component';
 import {HeaderComponent} from './header/header.component';
 import {HomeComponent} from './home/home.component';
 import {LoginComponent} from './login/login.component';
 import {VideoComponent} from './video/video.component';
 import {VtoComponent} from './vto/vto.component';
+import {FunTemplatesComponent} from './fun-templates/fun-templates.component';
 import {WorkbenchComponent} from './workbench/workbench.component';
 import {ProjectsComponent} from './projects/projects.component';
 import {ChatInterfaceComponent} from './workbench/components/chat-interface/chat-interface.component';
@@ -119,13 +120,14 @@ import {StoryboardComponent} from './workbench/components/storyboard/storyboard.
     FooterComponent,
     HomeComponent,
     LoginComponent,
-    FunTemplatesComponent,
     VideoComponent,
+    VtoComponent,
+    FunTemplatesComponent,
     MediaGalleryComponent,
+    GroupGalleryComponent,
     AssignTagsDialogComponent,
     MediaDetailComponent,
     MediaLightboxComponent,
-    VtoComponent,
     ImageSelectorComponent,
     SourceAssetGalleryComponent,
     ImageCropperDialogComponent,

@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fastapi import APIRouter, Depends
-from src.auth.auth_guard import RoleChecker
-from src.users.user_model import UserRoleEnum
+from fastapi import APIRouter, Depends, HTTPException, status
+from src.auth.auth_guard import RoleChecker, get_current_user
+from src.users.user_model import UserRoleEnum, UserModel
 from src.admin.admin_service import AdminService
 from src.admin.dto.admin_response_dto import (
     AdminOverviewStats,
@@ -132,3 +132,68 @@ async def cleanup_stuck_jobs(admin_service: AdminService = Depends()):
     """
     count = await admin_service.cleanup_stuck_jobs()
     return {"message": f"Cleaned up {count} stuck jobs", "count": count}
+
+
+# Group Management Endpoints
+
+@router.get("/groups")
+async def get_all_groups(admin_service: AdminService = Depends()):
+    """Retrieves all groups (admin view)."""
+    return await admin_service.get_all_groups()
+
+
+@router.post("/groups")
+async def create_group_admin(
+    name: str,
+    country_code: str | None = None,
+    admin_service: AdminService = Depends(),
+):
+    """Creates a new group (admin action)."""
+    return await admin_service.create_group_admin(name, country_code)
+
+
+@router.post("/groups/{group_id}/users")
+async def add_user_to_group(
+    group_id: int,
+    user_id: int,
+    role: str = "member",
+    admin_service: AdminService = Depends(),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Adds a user to a group (admin action)."""
+    return await admin_service.add_user_to_group(group_id, user_id, role, current_user)
+
+
+@router.delete("/groups/{group_id}")
+async def delete_group_admin(
+    group_id: int,
+    admin_service: AdminService = Depends(),
+):
+    """Deletes a group and all its members (admin action)."""
+    deleted = await admin_service.delete_group_admin(group_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Group {group_id} not found",
+        )
+    return {"message": f"Group {group_id} deleted successfully"}
+
+
+@router.get("/groups/usage-summary")
+async def get_group_usage_summary(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    admin_service: AdminService = Depends(),
+):
+    """Retrieves aggregate usage summary across all groups."""
+    return await admin_service.get_group_usage_summary(start_date, end_date)
+
+
+@router.get("/groups/usage-breakdown")
+async def get_group_usage_breakdown(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    admin_service: AdminService = Depends(),
+):
+    """Retrieves per-group usage breakdown."""
+    return await admin_service.get_group_usage_breakdown(start_date, end_date)

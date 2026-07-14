@@ -18,11 +18,8 @@ import {NgModule} from '@angular/core';
 import {RouterModule, Routes} from '@angular/router';
 import {AdminLayoutComponent} from './admin-layout/admin-layout.component';
 import {UsersManagementComponent} from './users-management/users-management.component';
-import {MediaTemplatesManagementComponent} from './media-templates-management/media-templates-management.component';
-import {SourceAssetsManagementComponent} from './source-assets-management/source-assets-management.component';
-import {MediaGalleryManagementComponent} from './media-gallery-management/media-gallery-management.component';
-import {TagsManagementComponent} from './tags-management/tags-management.component';
 import {AdminHomeComponent} from './admin-home/admin-home.component';
+import {GroupsManagementComponent} from './groups-management/groups-management.component';
 
 const routes: Routes = [
   {
@@ -32,10 +29,7 @@ const routes: Routes = [
       {path: '', redirectTo: 'dashboard', pathMatch: 'full'}, // Default child route
       {path: 'dashboard', component: AdminHomeComponent},
       {path: 'users', component: UsersManagementComponent},
-      {path: 'source-assets', component: SourceAssetsManagementComponent},
-      {path: 'media-templates', component: MediaTemplatesManagementComponent},
-      {path: 'media-gallery', component: MediaGalleryManagementComponent},
-      {path: 'tags', component: TagsManagementComponent},
+      {path: 'groups', component: GroupsManagementComponent},
     ],
   },
 ];

@@ -39,8 +39,10 @@ import {
   handleSuccessSnackbar,
 } from '../../../utils/handleMessageSnackbar';
 import {AssignTagsDialogComponent} from '../assign-tags-dialog/assign-tags-dialog.component';
+import {ShareToGroupDialogComponent} from '../share-to-group-dialog/share-to-group-dialog.component';
 import {TagsService} from '../../services/tags.service';
 import {WorkspaceStateService} from '../../../services/workspace/workspace-state.service';
+import {GroupService} from '../../../services/group/group.service';
 
 @Component({
   selector: 'app-media-lightbox',
@@ -69,15 +71,11 @@ export class MediaLightboxComponent
     return this.isImage;
   }
 
-  get showVtoButton(): boolean {
-    return this.isImage;
-  }
   @Output() editClicked = new EventEmitter<number>();
   @Output() generateVideoClicked = new EventEmitter<{
     role: 'start' | 'end';
     index: number;
   }>();
-  @Output() sendToVtoClicked = new EventEmitter<number>();
   @Output() extendWithAiClicked = new EventEmitter<{
     mediaItem: MediaItem;
     selectedIndex: number;
@@ -116,6 +114,7 @@ export class MediaLightboxComponent
     public dialog: MatDialog,
     private tagsService: TagsService,
     private workspaceStateService: WorkspaceStateService,
+    private groupService: GroupService,
   ) {}
 
   ngAfterViewInit(): void {
@@ -333,6 +332,39 @@ export class MediaLightboxComponent
     this.isShareMenuOpen = false;
   }
 
+  shareToGroupGallery(): void {
+    if (!this.mediaItem?.id) {
+      handleErrorSnackbar(
+        this.snackBar,
+        {message: 'Cannot share: Media item has no ID.'},
+        'Share to Group',
+      );
+      return;
+    }
+
+    const dialogRef = this.dialog.open(ShareToGroupDialogComponent, {
+      width: '450px',
+      data: {mediaItemIds: [this.mediaItem.id]},
+    });
+
+    dialogRef.afterClosed().subscribe((result: any) => {
+      if (!result) return;
+
+      this.groupService.shareItemsToGroup(result).subscribe({
+        next: (response: any) => {
+          handleSuccessSnackbar(
+            this.snackBar,
+            'Item shared to group successfully!',
+          );
+          this.isShareMenuOpen = false;
+        },
+        error: (error: any) => {
+          handleErrorSnackbar(this.snackBar, error, 'Share to Group');
+        },
+      });
+    });
+  }
+
   openPhotoSwipe(index: number): void {
     if (this.lightbox) {
       this.lightbox.loadAndOpen(index);
@@ -495,10 +527,6 @@ export class MediaLightboxComponent
 
   onGenerateVideoClick(role: 'start' | 'end'): void {
     this.generateVideoClicked.emit({role, index: this.selectedIndex});
-  }
-
-  onSendToVtoClick(): void {
-    this.sendToVtoClicked.emit(this.selectedIndex);
   }
 
   onExtendWithAiClick() {
