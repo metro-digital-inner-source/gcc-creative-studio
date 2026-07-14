@@ -34,13 +34,8 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import {UserModel} from '../../common/models/user.model';
 import {Group, GroupMember} from '../../common/models/group.model';
 import {GroupService} from '../../services/group/group.service';
-import {WorkspaceService} from '../../services/workspace/workspace.service';
 import {CreateGroupDialogComponent} from '../groups-management/create-group-dialog/create-group-dialog.component';
 import {AddMemberDialogComponent} from '../groups-management/add-member-dialog/add-member-dialog.component';
-import {
-  InviteUserModalComponent,
-  InviteUserData,
-} from '../../common/components/invite-user-modal/invite-user-modal.component';
 import {
   handleErrorSnackbar,
   handleSuccessSnackbar,
@@ -96,7 +91,6 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
   constructor(
     private userService: UserService,
     private groupService: GroupService,
-    private workspaceService: WorkspaceService,
     public dialog: MatDialog,
     private _snackBar: MatSnackBar,
     @Inject(PLATFORM_ID) private platformId: Object,
@@ -382,32 +376,15 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
     });
   }
 
-  openInviteUserDialog(): void {
-    const dialogRef = this.dialog.open<InviteUserModalComponent, InviteUserData>(
-      InviteUserModalComponent,
-      {
-        width: '500px',
-        data: {adminMode: true},
-      },
-    );
+  openAddUserDialog(): void {
+    const dialogRef = this.dialog.open(AddMemberDialogComponent, {
+      width: '500px',
+    });
 
     dialogRef.afterClosed().subscribe((result: any) => {
-      if (result && result.email && result.workspaceId && result.groupId) {
-        this.workspaceService
-          .inviteUser(result.workspaceId, result.email, result.role, result.groupId)
-          .subscribe({
-            next: () => {
-              handleSuccessSnackbar(this._snackBar, 'User invitation sent!');
-              this.loadGroups(); // Refresh the tree
-            },
-            error: (error: any) => {
-              handleErrorSnackbar(
-                this._snackBar,
-                error,
-                'Failed to send invitation',
-              );
-            },
-          });
+      if (result) {
+        handleSuccessSnackbar(this._snackBar, 'User added to group successfully!');
+        this.loadGroups();
       }
     });
   }

@@ -109,13 +109,15 @@ class GroupService:
     ) -> GroupModel:
         """Adds a member to a group.
         
-        Authorization: Only group admins can add members.
+        Authorization: Group admins or platform admins can add members.
         """
-        # 1. Check if requester is admin of the group
-        if not await self.group_repo.is_admin(group_id, requester.id):
+        # 1. Check if requester is allowed to manage this group.
+        is_platform_admin = UserRoleEnum.ADMIN in requester.roles
+        is_group_admin = await self.group_repo.is_admin(group_id, requester.id)
+        if not (is_platform_admin or is_group_admin):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only group admins can add members.",
+                detail="Only group admins or platform admins can add members.",
             )
 
         # 2. Check if group exists
