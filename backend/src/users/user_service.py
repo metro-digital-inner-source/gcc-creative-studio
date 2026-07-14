@@ -39,7 +39,9 @@ class UserService:
         return any(cls._role_name(role).lower() == "admin" for role in roles)
 
     async def _should_bootstrap_admin(self, email: str) -> bool:
-        configured_admin = (config_service.ADMIN_USER_EMAIL or "").strip().lower()
+        configured_admin = (
+            (config_service.ADMIN_USER_EMAIL or "").strip().lower()
+        )
         # If explicitly configured, only that email gets auto-admin.
         if configured_admin and configured_admin != "system":
             return email.lower() == configured_admin
@@ -69,10 +71,12 @@ class UserService:
         existing_user = await self.user_repo.get_by_email(normalized_email)
 
         if existing_user:
-            if await self._should_bootstrap_admin(normalized_email) and not self._has_admin_role(
-                existing_user.roles
-            ):
-                updated_roles = [self._role_name(role) for role in existing_user.roles]
+            if await self._should_bootstrap_admin(
+                normalized_email
+            ) and not self._has_admin_role(existing_user.roles):
+                updated_roles = [
+                    self._role_name(role) for role in existing_user.roles
+                ]
                 updated_roles.append(UserRoleEnum.ADMIN.value)
                 existing_user = await self.user_repo.update(
                     existing_user.id,

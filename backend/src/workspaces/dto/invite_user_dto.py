@@ -24,7 +24,9 @@ class InviteUserDto(BaseModel):
 
     email: EmailStr
     role: WorkspaceRoleEnum = Field(default=WorkspaceRoleEnum.VIEWER)
-    group_id: int = Field(..., description="ID of the group to assign the user to")
+    group_id: int = Field(
+        ..., description="ID of the group to assign the user to"
+    )
     group_role: GroupMemberRoleEnum = Field(default=GroupMemberRoleEnum.MEMBER)
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)

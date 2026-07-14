@@ -61,7 +61,7 @@ async def create_group(
     group_service: GroupService = Depends(),
 ):
     """Creates a new group with a dedicated shared workspace.
-    
+
     The creator is automatically added as an admin member.
     """
     return await group_service.create_group(create_request, current_user)
@@ -77,7 +77,7 @@ async def share_items_to_group(
     group_service: GroupService = Depends(),
 ):
     """Shares media items to a group by moving them to the group's shared workspace.
-    
+
     Authorization: User must be a member of the group.
     """
     return await group_service.share_items_to_group(share_request, current_user)
@@ -105,8 +105,12 @@ async def restore_items_from_group(
     summary="Get My Usage Statistics",
 )
 async def get_my_usage(
-    start_date: date | None = Query(None, description="Start date for usage period"),
-    end_date: date | None = Query(None, description="End date for usage period"),
+    start_date: date | None = Query(
+        None, description="Start date for usage period"
+    ),
+    end_date: date | None = Query(
+        None, description="End date for usage period"
+    ),
     current_user: UserModel = Depends(get_current_user),
     group_service: GroupService = Depends(),
 ):

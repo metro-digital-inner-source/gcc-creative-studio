@@ -23,9 +23,15 @@ class GroupUsageSummary(BaseDocument):
     """Summary DTO for aggregate group usage statistics."""
 
     total_groups: int = Field(description="Total number of groups.")
-    total_members: int = Field(description="Total number of group members across all groups.")
-    total_spend_usd: float = Field(description="Total spend in USD across all groups.")
-    total_tokens_consumed: int = Field(description="Total tokens consumed across all groups.")
+    total_members: int = Field(
+        description="Total number of group members across all groups."
+    )
+    total_spend_usd: float = Field(
+        description="Total spend in USD across all groups."
+    )
+    total_tokens_consumed: int = Field(
+        description="Total tokens consumed across all groups."
+    )
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -37,11 +43,17 @@ class GroupUsageBreakdown(BaseDocument):
 
     group_id: int = Field(description="The group ID.")
     group_name: str = Field(description="The group name.")
-    country_code: str | None = Field(None, description="The group's country code.")
+    country_code: str | None = Field(
+        None, description="The group's country code."
+    )
     member_count: int = Field(description="Number of members in the group.")
     spend_usd: float = Field(description="Total spend in USD for this group.")
-    tokens_consumed: int = Field(description="Total tokens consumed by this group.")
-    activity_count: int = Field(description="Total activity count for this group.")
+    tokens_consumed: int = Field(
+        description="Total tokens consumed by this group."
+    )
+    activity_count: int = Field(
+        description="Total activity count for this group."
+    )
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -56,8 +68,12 @@ class MyUsageResponse(BaseDocument):
     user_spend_usd: float = Field(description="User's spend in USD.")
     user_tokens_consumed: int = Field(description="User's tokens consumed.")
     user_activity_count: int = Field(description="User's activity count.")
-    group_total_spend_usd: float = Field(description="Group's total spend in USD.")
-    group_total_tokens: int = Field(description="Group's total tokens consumed.")
+    group_total_spend_usd: float = Field(
+        description="Group's total spend in USD."
+    )
+    group_total_tokens: int = Field(
+        description="Group's total tokens consumed."
+    )
 
     model_config = ConfigDict(
         populate_by_name=True,

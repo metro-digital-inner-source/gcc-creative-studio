@@ -139,9 +139,11 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
             select(GroupMember).where(GroupMember.group_id == group_id)
         )
         await self.db.execute(
-            GroupMember.__table__.delete().where(GroupMember.group_id == group_id)
+            GroupMember.__table__.delete().where(
+                GroupMember.group_id == group_id
+            )
         )
-        
+
         # Then delete the group
         result = await self.db.execute(
             select(self.model).where(self.model.id == group_id)
@@ -149,7 +151,7 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
         group = result.scalar_one_or_none()
         if not group:
             return False
-        
+
         await self.db.delete(group)
         await self.db.commit()
         return True
@@ -190,12 +192,23 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
         end_date: date | None = None,
     ) -> dict:
         """Gets aggregate usage summary across all groups."""
-        query = select(
-            func.count(func.distinct(Group.id)).label("total_groups"),
-            func.count(func.distinct(GroupMember.user_id)).label("total_members"),
-            func.coalesce(func.sum(GroupUsageDaily.spend_usd), 0).label("total_spend_usd"),
-            func.coalesce(func.sum(GroupUsageDaily.tokens_consumed), 0).label("total_tokens_consumed"),
-        ).select_from(Group).outerjoin(GroupMember).outerjoin(GroupUsageDaily)
+        query = (
+            select(
+                func.count(func.distinct(Group.id)).label("total_groups"),
+                func.count(func.distinct(GroupMember.user_id)).label(
+                    "total_members"
+                ),
+                func.coalesce(func.sum(GroupUsageDaily.spend_usd), 0).label(
+                    "total_spend_usd"
+                ),
+                func.coalesce(
+                    func.sum(GroupUsageDaily.tokens_consumed), 0
+                ).label("total_tokens_consumed"),
+            )
+            .select_from(Group)
+            .outerjoin(GroupMember)
+            .outerjoin(GroupUsageDaily)
+        )
 
         if start_date:
             query = query.where(GroupUsageDaily.date >= start_date)
@@ -223,10 +236,18 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
                 Group.id.label("group_id"),
                 Group.name.label("group_name"),
                 Group.country_code.label("country_code"),
-                func.count(func.distinct(GroupMember.user_id)).label("member_count"),
-                func.coalesce(func.sum(GroupUsageDaily.spend_usd), 0).label("spend_usd"),
-                func.coalesce(func.sum(GroupUsageDaily.tokens_consumed), 0).label("tokens_consumed"),
-                func.coalesce(func.sum(GroupUsageDaily.activity_count), 0).label("activity_count"),
+                func.count(func.distinct(GroupMember.user_id)).label(
+                    "member_count"
+                ),
+                func.coalesce(func.sum(GroupUsageDaily.spend_usd), 0).label(
+                    "spend_usd"
+                ),
+                func.coalesce(
+                    func.sum(GroupUsageDaily.tokens_consumed), 0
+                ).label("tokens_consumed"),
+                func.coalesce(
+                    func.sum(GroupUsageDaily.activity_count), 0
+                ).label("activity_count"),
             )
             .select_from(Group)
             .outerjoin(GroupMember)

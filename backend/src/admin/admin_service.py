@@ -108,8 +108,7 @@ class AdminService:
         admin_user: UserModel,
         country_code: str | None = None,
     ):
-        """Creates a new group as admin.
-        """
+        """Creates a new group as admin."""
         from src.groups.dto.group_dto import CreateGroupRequest
 
         request = CreateGroupRequest(name=name, country_code=country_code)
@@ -145,10 +144,10 @@ class AdminService:
     ):
         """Gets aggregate usage summary."""
         from datetime import date as date_type
-        
+
         start = date_type.fromisoformat(start_date) if start_date else None
         end = date_type.fromisoformat(end_date) if end_date else None
-        
+
         return await self.group_service.get_usage_summary_admin(start, end)
 
     async def get_group_usage_breakdown(
@@ -156,8 +155,8 @@ class AdminService:
     ):
         """Gets per-group usage breakdown."""
         from datetime import date as date_type
-        
+
         start = date_type.fromisoformat(start_date) if start_date else None
         end = date_type.fromisoformat(end_date) if end_date else None
-        
+
         return await self.group_service.get_usage_breakdown_admin(start, end)

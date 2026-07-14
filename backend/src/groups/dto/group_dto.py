@@ -84,6 +84,8 @@ class GroupResponse(BaseDocument):
     name: str
     country_code: str | None = None
     shared_workspace_id: int
-    member_count: int = Field(default=0, description="Number of members in the group.")
+    member_count: int = Field(
+        default=0, description="Number of members in the group."
+    )
     created_at: str  # ISO datetime string
     updated_at: str  # ISO datetime string
