@@ -104,6 +104,14 @@ jobs:
             echo "Skipping terraform-plan for this PR run."
             exit 0
           fi
+
+          if [[ ! "$TF_WIF_PROVIDER" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$ ]]; then
+            echo "Invalid TF_WIF_PROVIDER format: $TF_WIF_PROVIDER"
+            echo "Expected: projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/<POOL_ID>/providers/<PROVIDER_ID>"
+            echo "Fix by re-running infra/bootstrap/wif-setup.sh and updating GitHub secret TF_WIF_PROVIDER_*"
+            exit 1
+          fi
+
           echo "auth_enabled=true" >> "$GITHUB_OUTPUT"
           echo "workload_identity_provider=$TF_WIF_PROVIDER" >> "$GITHUB_OUTPUT"
           echo "service_account=$TF_SA_EMAIL" >> "$GITHUB_OUTPUT"
@@ -195,6 +203,14 @@ jobs:
             echo "Expected one of: TF_WIF_PROVIDER_DEV/dev, TF_SA_EMAIL_DEV/dev (or PP/pp, PROD/prod)."
             exit 1
           fi
+
+          if [[ ! "$TF_WIF_PROVIDER" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$ ]]; then
+            echo "Invalid TF_WIF_PROVIDER format: $TF_WIF_PROVIDER"
+            echo "Expected: projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/<POOL_ID>/providers/<PROVIDER_ID>"
+            echo "Fix by re-running infra/bootstrap/wif-setup.sh and updating GitHub secret TF_WIF_PROVIDER_*"
+            exit 1
+          fi
+
           echo "auth_enabled=true" >> "$GITHUB_OUTPUT"
           echo "workload_identity_provider=$TF_WIF_PROVIDER" >> "$GITHUB_OUTPUT"
           echo "service_account=$TF_SA_EMAIL" >> "$GITHUB_OUTPUT"

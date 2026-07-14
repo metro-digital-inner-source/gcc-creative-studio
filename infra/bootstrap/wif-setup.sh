@@ -59,6 +59,14 @@ echo "=========================================="
 echo "[1/8] Setting current GCP project..."
 gcloud config set project "${GCP_PROJECT_ID}"
 
+# Resolve project number for WIF resource names. The audience and principalSet
+# paths must use project number, not project ID.
+GCP_PROJECT_NUMBER=$(gcloud projects describe "${GCP_PROJECT_ID}" --format="value(projectNumber)")
+if [[ -z "${GCP_PROJECT_NUMBER}" ]]; then
+  echo "  ❌ Could not resolve project number for ${GCP_PROJECT_ID}"
+  exit 1
+fi
+
 # Step 2: Create Terraform Service Account
 echo "[2/8] Creating Terraform service account..."
 if gcloud iam service-accounts describe "${TF_SA_EMAIL}" --project="${GCP_PROJECT_ID}" 2>/dev/null; then
@@ -105,7 +113,7 @@ echo "  ✓ APIs enabled"
 
 # Step 5: Create Workload Identity Pool
 echo "[5/8] Creating Workload Identity Pool..."
-WIF_POOL_RESOURCE="projects/${GCP_PROJECT_ID}/locations/${WIF_POOL_LOCATION}/workloadIdentityPools/${WIF_POOL_ID}"
+WIF_POOL_RESOURCE="projects/${GCP_PROJECT_NUMBER}/locations/${WIF_POOL_LOCATION}/workloadIdentityPools/${WIF_POOL_ID}"
 
 if gcloud iam workload-identity-pools describe "${WIF_POOL_ID}" \
   --project="${GCP_PROJECT_ID}" \
