@@ -17,7 +17,11 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query, status
 
 from src.auth.auth_guard import get_current_user
-from src.groups.dto.group_dto import CreateGroupRequest, ShareItemsRequest
+from src.groups.dto.group_dto import (
+    CreateGroupRequest,
+    RestoreItemsRequest,
+    ShareItemsRequest,
+)
 from src.groups.dto.usage_dto import MyUsageResponse
 from src.groups.group_service import GroupService
 from src.groups.schema.group_model import GroupModel
@@ -77,6 +81,22 @@ async def share_items_to_group(
     Authorization: User must be a member of the group.
     """
     return await group_service.share_items_to_group(share_request, current_user)
+
+
+@router.post(
+    "/restore-items",
+    summary="Restore Items from Group",
+)
+async def restore_items_from_group(
+    restore_request: RestoreItemsRequest,
+    current_user: UserModel = Depends(get_current_user),
+    group_service: GroupService = Depends(),
+):
+    """Restores moved media items to the workspace they originated from."""
+    return await group_service.restore_items_from_group(
+        restore_request,
+        current_user,
+    )
 
 
 @router.get(

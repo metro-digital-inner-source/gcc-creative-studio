@@ -51,20 +51,6 @@
         <span>{{ workspace.name }}</span>
       </button>
       <mat-divider></mat-divider>
-      <button mat-menu-item (click)="openCreateWorkspaceDialog()">
-        <mat-icon>add</mat-icon>
-        <span>Create New Private Workspace</span>
-      </button>
-      <button
-        mat-menu-item
-        (click)="openInviteDialog($event)"
-        [disabled]="!canInvite"
-        matTooltipPosition="right"
-        matTooltip="You can invite users in your Private Workspaces!"
-      >
-        <mat-icon>person_add</mat-icon>
-        <span>Invite Users</span>
-      </button>
       <button
         mat-menu-item
         [disabled]="

@@ -132,6 +132,28 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
         groups = result.scalars().all()
         return [self._map_to_schema(g) for g in groups]
 
+    async def delete_group(self, group_id: int) -> bool:
+        """Deletes a group and all its members. Returns True if deleted, False if not found."""
+        # First delete all group members
+        await self.db.execute(
+            select(GroupMember).where(GroupMember.group_id == group_id)
+        )
+        await self.db.execute(
+            GroupMember.__table__.delete().where(GroupMember.group_id == group_id)
+        )
+        
+        # Then delete the group
+        result = await self.db.execute(
+            select(self.model).where(self.model.id == group_id)
+        )
+        group = result.scalar_one_or_none()
+        if not group:
+            return False
+        
+        await self.db.delete(group)
+        await self.db.commit()
+        return True
+
     async def get_usage_for_user(
         self,
         user_id: int,

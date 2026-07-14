@@ -207,6 +207,21 @@
           variant="primary"
           size="small"
           shape="circle"
+          (click)="shareSelectedToGroup()"
+          title="Move selected media to group"
+          [disabled]="selectedMediaItemIds.length === 0 || isSharingToGroup || isCopying || isDownloading || isDeleting"
+        >
+          <mat-icon *ngIf="!isSharingToGroup">group_add</mat-icon>
+          <mat-progress-spinner
+            *ngIf="isSharingToGroup"
+            mode="indeterminate"
+            diameter="18"
+          ></mat-progress-spinner>
+        </studio-button>
+        <studio-button
+          variant="primary"
+          size="small"
+          shape="circle"
           (click)="openBulkAssignTagsDialog()"
           title="Tag selected"
           [disabled]="selectedItems.size === 0 || isCopying || isDownloading || isDeleting"

@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fastapi import APIRouter, Depends
-from src.auth.auth_guard import RoleChecker
-from src.users.user_model import UserRoleEnum
+from fastapi import APIRouter, Depends, HTTPException, status
+from src.auth.auth_guard import RoleChecker, get_current_user
+from src.users.user_model import UserRoleEnum, UserModel
 from src.admin.admin_service import AdminService
 from src.admin.dto.admin_response_dto import (
     AdminOverviewStats,
@@ -158,9 +158,25 @@ async def add_user_to_group(
     user_id: int,
     role: str = "member",
     admin_service: AdminService = Depends(),
+    current_user: UserModel = Depends(get_current_user),
 ):
     """Adds a user to a group (admin action)."""
-    return await admin_service.add_user_to_group(group_id, user_id, role)
+    return await admin_service.add_user_to_group(group_id, user_id, role, current_user)
+
+
+@router.delete("/groups/{group_id}")
+async def delete_group_admin(
+    group_id: int,
+    admin_service: AdminService = Depends(),
+):
+    """Deletes a group and all its members (admin action)."""
+    deleted = await admin_service.delete_group_admin(group_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Group {group_id} not found",
+        )
+    return {"message": f"Group {group_id} deleted successfully"}
 
 
 @router.get("/groups/usage-summary")

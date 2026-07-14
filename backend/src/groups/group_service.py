@@ -15,8 +15,14 @@
 from datetime import date
 
 from fastapi import Depends, HTTPException, status
+from sqlalchemy import select
 
-from src.groups.dto.group_dto import CreateGroupRequest, ShareItemsRequest
+from src.common.schema.media_item_model import MediaItem
+from src.groups.dto.group_dto import (
+    CreateGroupRequest,
+    RestoreItemsRequest,
+    ShareItemsRequest,
+)
 from src.groups.dto.usage_dto import (
     GroupUsageBreakdown,
     GroupUsageSummary,
@@ -27,7 +33,8 @@ from src.groups.schema.group_model import (
     GroupMemberRoleEnum,
     GroupModel,
 )
-from src.users.user_model import UserModel
+from src.images.repository.media_item_repository import MediaRepository
+from src.users.user_model import UserModel, UserRoleEnum
 from src.workspaces.dto.create_workspace_dto import CreateWorkspaceDto
 from src.workspaces.schema.workspace_model import (
     WorkspaceMember,
@@ -35,6 +42,7 @@ from src.workspaces.schema.workspace_model import (
     WorkspaceScopeEnum,
 )
 from src.workspaces.workspace_service import WorkspaceService
+from src.workspaces.workspace_auth_guard import WorkspaceAuth
 
 
 class GroupService:
@@ -44,9 +52,13 @@ class GroupService:
         self,
         group_repo: GroupRepository = Depends(),
         workspace_service: WorkspaceService = Depends(),
+        media_repo: MediaRepository = Depends(),
+        workspace_auth: WorkspaceAuth = Depends(),
     ):
         self.group_repo = group_repo
         self.workspace_service = workspace_service
+        self.media_repo = media_repo
+        self.workspace_auth = workspace_auth
 
     async def get_user_groups(self, user_id: int) -> list[GroupModel]:
         """Gets all groups for a user."""
@@ -144,9 +156,17 @@ class GroupService:
         user: UserModel,
     ) -> dict:
         """Shares media items to a group by moving them to the group's workspace.
-        
-        Authorization: User must be a member of the group.
+
+        A move preserves ownership and records the source workspace so the item
+        can later be restored. All requested items move together or none do.
         """
+        media_item_ids = list(dict.fromkeys(share_request.media_item_ids))
+        if not media_item_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="At least one media item is required.",
+            )
+
         # 1. Check if user is member of the group
         if not await self.group_repo.is_member(share_request.group_id, user.id):
             raise HTTPException(
@@ -162,14 +182,139 @@ class GroupService:
                 detail="Group not found.",
             )
 
-        # 3. TODO: Move media items to the group's shared workspace
-        # This will be implemented when we integrate with the media/galleries module
-        # For now, return a placeholder response
+        # 3. Load and validate every item before changing any workspace.
+        result = await self.media_repo.db.execute(
+            select(MediaItem).where(MediaItem.id.in_(media_item_ids))
+        )
+        media_items = result.scalars().all()
+        found_ids = {item.id for item in media_items}
+        missing_ids = sorted(set(media_item_ids) - found_ids)
+        if missing_ids:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Media items not found: {missing_ids}",
+            )
+
+        is_global_admin = UserRoleEnum.ADMIN in user.roles
+        for media_item in media_items:
+            if media_item.deleted_at is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Media item {media_item.id} was deleted.",
+                )
+
+            source_workspace = await self.workspace_auth.authorize(
+                media_item.workspace_id,
+                user,
+            )
+            is_item_owner = media_item.user_id == user.id
+            is_workspace_owner = source_workspace.owner_id == user.id
+            if not (is_global_admin or is_item_owner or is_workspace_owner):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"You cannot move media item {media_item.id}.",
+                )
+
+            if media_item.moved_to_group_id not in (None, share_request.group_id):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Media item {media_item.id} is already shared to a "
+                        "different group. Restore it before moving it again."
+                    ),
+                )
+
+        # 4. Apply all changes in one commit after validation succeeds.
+        try:
+            for media_item in media_items:
+                if media_item.original_workspace_id is None:
+                    media_item.original_workspace_id = media_item.workspace_id
+                media_item.workspace_id = group.shared_workspace_id
+                media_item.moved_to_group_id = share_request.group_id
+            await self.media_repo.db.commit()
+        except Exception:
+            await self.media_repo.db.rollback()
+            raise
+
         return {
-            "message": "Items shared to group successfully",
+            "message": "Items moved to group successfully",
             "group_id": share_request.group_id,
             "shared_workspace_id": group.shared_workspace_id,
-            "item_count": len(share_request.media_item_ids),
+            "item_count": len(media_items),
+            "media_item_ids": media_item_ids,
+        }
+
+    async def restore_items_from_group(
+        self,
+        restore_request: RestoreItemsRequest,
+        user: UserModel,
+    ) -> dict:
+        """Restores media items from a group workspace to their origin."""
+        media_item_ids = list(dict.fromkeys(restore_request.media_item_ids))
+        if not media_item_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="At least one media item is required.",
+            )
+
+        result = await self.media_repo.db.execute(
+            select(MediaItem).where(MediaItem.id.in_(media_item_ids))
+        )
+        media_items = result.scalars().all()
+        found_ids = {item.id for item in media_items}
+        missing_ids = sorted(set(media_item_ids) - found_ids)
+        if missing_ids:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Media items not found: {missing_ids}",
+            )
+
+        is_global_admin = UserRoleEnum.ADMIN in user.roles
+        for media_item in media_items:
+            if (
+                media_item.original_workspace_id is None
+                or media_item.moved_to_group_id is None
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Media item {media_item.id} was not moved to a group "
+                        "and cannot be restored."
+                    ),
+                )
+
+            current_workspace = await self.workspace_auth.authorize(
+                media_item.workspace_id,
+                user,
+            )
+            original_workspace = await self.workspace_auth.authorize(
+                media_item.original_workspace_id,
+                user,
+            )
+            is_item_owner = media_item.user_id == user.id
+            is_workspace_owner = (
+                current_workspace.owner_id == user.id
+                or original_workspace.owner_id == user.id
+            )
+            if not (is_global_admin or is_item_owner or is_workspace_owner):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"You cannot restore media item {media_item.id}.",
+                )
+
+        try:
+            for media_item in media_items:
+                media_item.workspace_id = media_item.original_workspace_id
+                media_item.moved_to_group_id = None
+            await self.media_repo.db.commit()
+        except Exception:
+            await self.media_repo.db.rollback()
+            raise
+
+        return {
+            "message": "Items restored to their original workspaces successfully",
+            "item_count": len(media_items),
+            "media_item_ids": media_item_ids,
         }
 
     async def get_my_usage(

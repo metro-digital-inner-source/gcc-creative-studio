@@ -141,6 +141,14 @@ class MediaItem(Base):
         ForeignKey("workspaces.id"),
         nullable=False,
     )
+    original_workspace_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workspaces.id"),
+        nullable=True,
+    )
+    moved_to_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("groups.id"),
+        nullable=True,
+    )
     user_email: Mapped[str] = mapped_column(String, nullable=False)
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"),
@@ -246,6 +254,8 @@ class MediaItemModel(BaseDocument):
     workspace_id: int = Field(
         description="Foreign key (ID) to the 'workspaces' collection this creation belongs to.",
     )
+    original_workspace_id: int | None = None
+    moved_to_group_id: int | None = None
     user_email: str
     user_id: int | None = None  # TODO: Change to 'required' in the future
     mime_type: MimeTypeEnum

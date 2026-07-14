@@ -251,8 +251,8 @@ export class GalleryService implements OnDestroy {
       status: item.status,
       gcsUris: item.gcsUris,
       thumbnailUris: item.thumbnailUris,
-      presignedUrls: item.presignedUrls,
-      presignedThumbnailUrls: item.presignedThumbnailUrls,
+      presignedUrls: item.presignedUrls || item.presigned_urls || [],
+      presignedThumbnailUrls: item.presignedThumbnailUrls || item.presigned_thumbnail_urls || [],
       metadata: metadata,
       mimeType: metadata.mimeType || metadata.mime_type || item.mimeType,
       aspectRatio:

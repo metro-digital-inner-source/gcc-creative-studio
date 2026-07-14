@@ -1,0 +1,167 @@
+<!--
+ Copyright 2025 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<div class="group-gallery-container grid grid-cols-1">
+  <!-- Header -->
+  <div class="header-section mb-8 bg-gradient-to-r from-purple-600 to-blue-600 p-8 rounded-lg">
+    <h1 class="text-white text-3xl font-bold mb-2">Group Gallery</h1>
+    <p class="text-white/80">View and manage media shared with your groups</p>
+  </div>
+
+  <!-- Group Selector -->
+  <div class="group-selector-section mb-6 px-4">
+    <div class="flex items-center gap-4">
+      <mat-form-field appearance="outline" class="flex-1 max-w-md">
+        <mat-label>Select Group</mat-label>
+        <mat-select
+          [(value)]="selectedGroup"
+          (selectionChange)="selectGroup($event.value)"
+          [disabled]="isLoadingGroups"
+        >
+          <mat-option *ngFor="let group of groups" [value]="group">
+            {{ group.name }}
+            <span class="text-sm text-gray-500 ml-2">({{ group.members?.length || 0 }} members)</span>
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <div *ngIf="isLoadingGroups" class="flex items-center gap-2">
+        <mat-progress-spinner mode="indeterminate" diameter="24"></mat-progress-spinner>
+        <span class="text-sm text-gray-500">Loading groups...</span>
+      </div>
+    </div>
+
+    <div *ngIf="!isLoadingGroups && groups.length === 0" class="mt-4">
+      <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <p class="text-yellow-800">
+          You are not a member of any groups yet. Contact an administrator to be added to a group.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gallery Content -->
+  <div *ngIf="selectedGroup" class="gallery-content px-4">
+    <!-- Selection Controls -->
+    <div class="selection-controls mb-4 flex items-center gap-4">
+      <button
+        mat-stroked-button
+        (click)="selectAll()"
+        [disabled]="images.length === 0"
+      >
+        {{ isAllSelected ? 'Deselect All' : 'Select All' }}
+      </button>
+      <span class="text-sm text-gray-600" *ngIf="selectedItems.size > 0">
+        {{ selectedItems.size }} items selected
+      </span>
+    </div>
+
+    <!-- Bulk Actions Bar -->
+    <div
+      *ngIf="selectedItems.size > 0"
+      class="flex justify-end items-center gap-4 px-4 py-2 mb-4 bg-gray-100 rounded-lg"
+    >
+      <span class="text-gray-700 text-sm mr-auto">{{ selectedItems.size }} items selected</span>
+      
+      <studio-button
+        variant="primary"
+        size="small"
+        shape="circle"
+        (click)="restoreSelected()"
+        title="Restore selected items to original workspace"
+        [disabled]="selectedMediaItemIds.length === 0 || isRestoring"
+      >
+        <mat-icon *ngIf="!isRestoring">undo</mat-icon>
+        <mat-progress-spinner
+          *ngIf="isRestoring"
+          mode="indeterminate"
+          diameter="18"
+        ></mat-progress-spinner>
+      </studio-button>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div
+      *ngIf="isLoading && images.length === 0"
+      class="text-center flex flex-col justify-center items-center mt-8"
+    >
+      <mat-progress-spinner mode="indeterminate" diameter="48"></mat-progress-spinner>
+      <p class="mt-4 text-gray-600">Loading group media...</p>
+    </div>
+
+    <!-- Gallery Grid -->
+    <div *ngIf="!isLoading || images.length > 0" class="gallery-grid">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div
+          *ngFor="let media of images"
+          class="gallery-item cursor-pointer"
+          (click)="toggleSelection(media, $event)"
+        >
+          <app-gallery-card
+            [item]="media"
+            [isSelected]="isItemSelected(media)"
+            [anyItemSelected]="selectedItems.size > 0"
+            (selectionToggled)="toggleSelection($event.item, $event.event)"
+          ></app-gallery-card>
+        </div>
+      </div>
+
+      <!-- Load More Button -->
+      <div
+        *ngIf="!allImagesLoaded && images.length > 0"
+        class="text-center mt-8"
+      >
+        <button
+          mat-raised-button
+          color="primary"
+          (click)="loadMore()"
+          [disabled]="isLoading"
+        >
+          <mat-icon *ngIf="!isLoading">expand_more</mat-icon>
+          <mat-progress-spinner
+            *ngIf="isLoading"
+            mode="indeterminate"
+            diameter="18"
+          ></mat-progress-spinner>
+          {{ isLoading ? 'Loading...' : 'Load More' }}
+        </button>
+      </div>
+
+      <!-- Empty State -->
+      <div
+        *ngIf="!isLoading && images.length === 0"
+        class="text-center mt-12"
+      >
+        <mat-icon class="text-gray-400 text-6xl">folder_open</mat-icon>
+        <p class="mt-4 text-gray-600 text-lg">
+          No media items shared with this group yet
+        </p>
+        <p class="mt-2 text-gray-500 text-sm">
+          Media shared to this group will appear here
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- No Group Selected -->
+  <div
+    *ngIf="!selectedGroup && !isLoadingGroups && groups.length > 0"
+    class="text-center mt-12 px-4"
+  >
+    <mat-icon class="text-gray-400 text-6xl">group</mat-icon>
+    <p class="mt-4 text-gray-600 text-lg">Select a group to view shared media</p>
+  </div>
+</div>

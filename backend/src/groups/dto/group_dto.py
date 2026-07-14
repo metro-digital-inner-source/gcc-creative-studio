@@ -64,6 +64,19 @@ class ShareItemsRequest(BaseModel):
     )
 
 
+class RestoreItemsRequest(BaseModel):
+    """Request DTO for restoring media from a group workspace."""
+
+    media_item_ids: list[int] = Field(
+        description="List of media item IDs to restore to their original workspaces."
+    )
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        alias_generator=to_camel,
+    )
+
+
 class GroupResponse(BaseDocument):
     """Response DTO for group data."""
 

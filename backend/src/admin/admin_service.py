@@ -122,9 +122,9 @@ class AdminService:
         )
         return await self.group_service.create_group(request, system_user)
 
-    async def add_user_to_group(self, group_id: int, user_id: int, role: str):
+    async def add_user_to_group(self, group_id: int, user_id: int, role: str, admin_user: "UserModel"):
         """Adds a user to a group (admin action)."""
-        from src.users.user_model import UserModel
+        from src.groups.dto.group_request_dto import AddGroupMemberRequest
         
         # Parse role
         try:
@@ -132,18 +132,17 @@ class AdminService:
         except ValueError:
             member_role = GroupMemberRoleEnum.MEMBER
         
-        # System admin making the change
-        system_user = UserModel(
-            id=1,
-            email="admin@system",
-            name="System Admin",
-            roles=["admin"],
+        # Use the proper group service method which handles authorization
+        request = AddGroupMemberRequest(
+            user_id=user_id,
+            role=member_role
         )
-        
-        # For admin operations, we bypass the is_admin check
-        # by directly using the repository
-        await self.group_service.group_repo.add_member(group_id, user_id, member_role)
+        return await self.group_service.add_member_to_group(group_id, request, admin_user)
         return await self.group_service.group_repo.get_by_id_with_members(group_id)
+
+    async def delete_group_admin(self, group_id: int) -> bool:
+        """Deletes a group (admin action). Returns True if deleted, False if not found."""
+        return await self.group_service.group_repo.delete_group(group_id)
 
     async def get_group_usage_summary(
         self, start_date: str | None = None, end_date: str | None = None

@@ -174,44 +174,6 @@ export class WorkspaceSwitcherComponent implements OnInit {
     }
   }
 
-  openCreateWorkspaceDialog(): void {
-    const dialogRef = this.dialog.open(CreateWorkspaceModalComponent, {
-      width: '300px',
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      if (result) {
-        this.createWorkspace(result);
-      }
-    });
-  }
-
-  createWorkspace(name: string): void {
-    this.workspaceService.createWorkspace(name).subscribe({
-      next: newWorkspace => {
-        handleSuccessSnackbar(this.snackBar, `Workspace "${name}" created!`);
-        this.workspaces.push(newWorkspace);
-        this.setActiveWorkspace(newWorkspace.id);
-      },
-      error: error => {
-        handleErrorSnackbar(this.snackBar, error, 'Could not create workspace');
-      },
-    });
-  }
-
-  get canInvite(): boolean {
-    if (
-      !this.currentUser ||
-      !this.activeWorkspace ||
-      this.activeWorkspace?.scope === WorkspaceScope.PUBLIC
-    ) {
-      return false;
-    }
-    const isOwner = this.currentUser.id === this.activeWorkspace.ownerId;
-    const isAdmin = !!this.currentUser.roles?.includes(UserRolesEnum.ADMIN);
-    return isOwner || isAdmin;
-  }
-
   get canAccessBrandGuidelines(): boolean {
     if (!this.currentUser || !this.activeWorkspace) return false;
 
@@ -231,38 +193,6 @@ export class WorkspaceSwitcherComponent implements OnInit {
     const isAdmin = !!this.currentUser.roles?.includes(UserRolesEnum.ADMIN);
     const isOwner = this.currentUser.id === this.activeWorkspace.ownerId;
     return isAdmin || isOwner;
-  }
-
-  openInviteDialog(event: MouseEvent): void {
-    event.stopPropagation();
-    if (!this.activeWorkspace) return;
-
-    const dialogRef = this.dialog.open<
-      InviteUserModalComponent,
-      InviteUserData
-    >(InviteUserModalComponent, {
-      width: '350px',
-      data: {workspaceName: this.activeWorkspace.name},
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      if (result && this.activeWorkspaceId) {
-        this.workspaceService
-          .inviteUser(this.activeWorkspaceId, result.email, result.role)
-          .subscribe({
-            next: () => {
-              handleSuccessSnackbar(this.snackBar, 'Invitation sent!');
-            },
-            error: error => {
-              handleErrorSnackbar(
-                this.snackBar,
-                error,
-                'Failed to send invitation',
-              );
-            },
-          });
-      }
-    });
   }
 
   openBrandGuidelinesDialog(event: MouseEvent): void {

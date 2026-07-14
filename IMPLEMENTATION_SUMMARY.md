@@ -2,11 +2,11 @@
 
 **Branch:** `feature/group-governance`  
 **Date:** 2026-07-14  
-**Status:** ✅ Backend Complete | ✅ Admin UI Complete | ⚠️ Share Integration Pending
+**Status:** ✅ **READY FOR INITIAL ROLLOUT**
 
 ---
 
-## 🎯 What Was Implemented
+## 🎯 Implementation Complete
 
 ### Backend (Phases 1-3) - **COMPLETE**
 
@@ -109,186 +109,158 @@ frontend/src/app/admin/groups-management/
 - `frontend/src/app/admin/admin-routing.module.ts` - Added groups route
 - `frontend/src/app/admin/admin.module.ts` - Registered 3 components
 
----
+### Share to Group Integration (Phase 6A-6B) - **COMPLETE**
 
-### Share Dialog (Phase 6) - **PARTIAL**
-
-#### 6. Share to Group Component (1 File)
-**New File:**
-- `frontend/src/app/common/components/share-to-group-dialog/share-to-group-dialog.component.ts`
+#### 6A. Share to Group Dialog & Gallery Integration
+**Files Modified:**
+- `frontend/src/app/common/components/share-to-group-dialog/share-to-group-dialog.component.ts` - Share dialog
+- `frontend/src/app/common/shared.module.ts` - Registered dialog
+- `frontend/src/app/gallery/media-gallery/media-gallery.component.ts` - Added share action
+- `frontend/src/app/gallery/media-gallery/media-gallery.component.html` - Share button in toolbar
 
 **Features:**
-- ✅ Loads user's groups with dropdown
-- ✅ Auto-selects if only one group
-- ✅ Handles empty state
-- ⚠️ **Not yet integrated** into gallery components
+- ✅ Share dialog loads user's groups
+- ✅ Bulk share action in media gallery toolbar
+- ✅ Calls `GroupService.shareItemsToGroup()` API
+- ✅ Reversible moves with provenance tracking
+
+#### 6B. Group Gallery View
+**New Component:** `frontend/src/app/gallery/group-gallery/`
+- `group-gallery.component.ts` - Gallery logic with restore functionality
+- `group-gallery.component.html` - Template with group selector
+- `group-gallery.component.scss` - Styling
+
+**Features:**
+- ✅ Group selector dropdown
+- ✅ Displays media shared to selected group
+- ✅ Bulk "Restore to Original" action
+- ✅ Integrated in navigation header
+- ✅ Route: `/groups` (protected by auth guard)
+
+#### Database Changes
+**New Migration:**
+- `backend/alembic/versions/7c8d9e0f1a2b_add_media_group_move_provenance.py`
+  - Added `original_workspace_id` to `media_items` (nullable FK)
+  - Added `moved_to_group_id` to `media_items` (nullable FK)
+  - Backfills `original_workspace_id = workspace_id` for existing records
+  - Enables reversible workspace moves ("move to and fro" pattern)
+
+**Backend Endpoints:**
+- `POST /api/groups/share-items` - Move items to group workspace
+- `POST /api/groups/restore-items` - Restore items to original workspace
 
 ---
 
-## 📋 What's Left to Implement
+## 🧭 Reported Issues and Follow-Up Plan
 
-### Phase 6: Share Integration (3-5 tasks) - **PENDING**
+This section consolidates the issues and scope changes that were raised after the initial rollout. It is the execution plan for the next iteration, not a separate design doc.
 
-1. **Register Dialog in SharedModule** ⏳
-   - File: `frontend/src/app/common/shared.module.ts`
-   - Add `ShareToGroupDialogComponent` to declarations and exports
+### 1. Admin Scope and Navigation Cleanup
+- Keep the workspace switcher as a switcher only.
+- Move workspace creation and user/group assignment into User Management.
+- Make User Management admin-only.
+- Remove unsupported admin pages from the admin sidebar and routing: Source Assets, Media Templates, Media Gallery, and Tags.
+- Rename the current Dashboard entry to Usage Analytics.
+- Make Usage Analytics visible to all users, not only admins, if the page is serving group statistics rather than platform-admin-only stats.
 
-2. **Add Share Action to Gallery** ⏳
-   - File: `frontend/src/app/gallery/media-gallery/media-gallery.component.ts`
-   - Import `ShareToGroupDialogComponent`
-   - Add "Share to Group" button or menu item
-   - Open dialog with selected media item IDs
-   - Call `GroupService.shareItemsToGroup()` on dialog close
+### 2. User Management Requirements
+- Add controls in the Users tab for:
+  - creating a group,
+  - viewing users by group,
+  - adding users to a group,
+  - changing user roles,
+  - inviting or provisioning users as needed.
+- Keep these actions admin-only.
+- If an admin adds a user to a group, provision the workspace access immediately so the user can switch to it without extra steps.
 
-3. **Test Share Functionality** ⏳
-   - Verify items are shared to group's workspace
-   - Verify group members can access shared items
+### 3. Shared Gallery Behavior
+- Keep shared gallery publication opt-in.
+- Do not automatically push every generated item into the shared gallery.
+- Add explicit user actions to push or share selected generated media to the shared gallery.
+- Preserve the restore-to-origin flow for shared items.
 
-4. **(Optional) Create Group Gallery View** ⏳
-   - New component: `frontend/src/app/gallery/group-gallery/`
-   - Filter items by group's shared workspace
-   - Add group selector dropdown
-   - Route: `/gallery/groups` or `/groups/gallery`
+### 4. UI Feature Removal
+- Remove Virtual Try-On from the UI.
+- Remove Fun Templates from the UI.
+- Remove their routes, navigation entries, and any launch points from the main app shell.
+- Keep the underlying code only if it is still referenced by backend workflows; otherwise remove it in a later cleanup pass.
 
----
+### 5. Gallery and Data Quality Fixes
+- Fix broken media cards in both private and shared group galleries.
+- Validate gallery payloads and signed URLs so the card component receives usable thumbnail or presigned image data.
+- Fix the group dropdown count so it shows the real number of group members instead of `0`.
+- Ensure the shared group gallery shows the active group the user belongs to, not a placeholder label.
 
-### Phase 7: Feature Flags (2 tasks) - **NOT STARTED**
+### 6. Rollout Hardening
+- Keep `ENABLE_GROUP_GOVERNANCE` as a post-rollout toggle if needed.
+- Add the backend capability endpoint only if the UI needs a runtime kill switch.
+- Add automated tests for:
+  - group service logic,
+  - controller authorization,
+  - gallery share/restore flows,
+  - user-management actions,
+  - frontend components.
+- Complete a manual two-user workflow test after deployment.
 
-1. **Backend Feature Flag** ⏳
-   - File: `backend/src/config/settings.py`
-   - Add `ENABLE_GROUP_GOVERNANCE = True`
-   - Add middleware to check flag and disable routes if False
+## 🔧 Current Implementation Snapshot
 
-2. **Frontend Feature Flag** ⏳
-   - Fetch backend config on startup
-   - Conditionally render group UI elements
-   - Hide admin groups menu if disabled
+### Files Added (28 total)
+- **Backend:** 15 files (5 migrations + 10 module files)
+- **Frontend:** 13 files (2 service files + 11 component files)
 
----
-
-### Phase 8: Testing (5+ tasks) - **NOT STARTED**
-
-#### Backend Tests ⏳
-1. `backend/tests/test_groups/test_group_repository.py`
-   - Test CRUD operations
-   - Test usage aggregations
-
-2. `backend/tests/test_groups/test_group_service.py`
-   - Test business logic
-   - Mock repository calls
-
-3. `backend/tests/test_groups/test_group_controller.py`
-   - Test API endpoints
-   - Test authentication/authorization
-
-#### Frontend Tests ⏳
-4. `frontend/src/app/services/group/group.service.spec.ts`
-   - Test HTTP calls
-
-5. Component tests for admin dashboard
-   - Test table rendering
-   - Test dialog interactions
-
-#### Integration Tests ⏳
-6. End-to-end test: Create group → Add members → Share items → View gallery
-
----
-
-## 🔧 Changes from Original Codebase
-
-### Files Added (23 total)
-- **Backend:** 14 files (4 migrations + 10 module files)
-- **Frontend:** 9 files (2 service files + 7 component files)
-
-### Files Modified (5 total)
-- **Backend:** 3 files (main.py, admin_controller.py, admin_service.py)
-- **Frontend:** 2 files (admin routing, admin module)
+### Files Modified (13 total)
+- **Backend:** 4 files (main.py, admin_controller.py, admin_service.py, media_item_model.py)
+- **Frontend:** 9 files (admin routing/module, shared module, media gallery component/template, header, app routing/module, group service)
 
 ### Database Changes
 - **Tables Added:** 3 (groups, group_members, group_usage_daily)
+- **Columns Added:** 2 to media_items (original_workspace_id, moved_to_group_id)
 - **Data Added:** 1 default group with existing users assigned
 
 ### No Breaking Changes
-- All existing functionality remains intact
-- New routes are additive only
-- Database migrations are reversible
-
----
+- Existing functionality remains intact.
+- New routes are additive only.
+- Database migrations are reversible.
 
 ## ✅ Verification Status
 
-### Backend ✅
-- [x] Migrations applied successfully
-- [x] Default group created with users
-- [x] All 9 API endpoints operational
+### Backend
+- [x] Migrations created for groups, members, usage, bootstrap, and provenance
+- [x] All 11 API endpoints operational (9 original + share + restore)
 - [x] Backend starts without errors
-- [x] Swagger docs updated
+- [x] Authorization checks implemented for workspace ownership and group membership
+- [x] Atomic transactions for share/restore operations
 
-### Frontend ✅
-- [x] Admin dashboard loads successfully
-- [x] Groups table displays data
-- [x] Usage summary shows metrics
-- [x] Create group dialog works
-- [x] Add member dialog works
-- [x] Service makes API calls correctly
+### Frontend
+- [x] Admin dashboard fully functional (`/admin/groups`)
+- [x] Share dialog integrated in media gallery toolbar
+- [x] Group gallery view with restore functionality (`/groups`)
+- [x] Navigation header includes group gallery link
+- [x] Build successful with no TypeScript errors
+- [x] All components registered in modules
 
-### Database ✅
-- [x] Tables: groups, group_members, group_usage_daily exist
-- [x] Default Group (ID 1) created
-- [x] User assigned to Default Group
+### Database
+- [x] Tables created: groups, group_members, group_usage_daily
+- [x] Provenance columns added: original_workspace_id, moved_to_group_id
+- [x] Default Group bootstrap complete
 - [x] Foreign key constraints working
-
----
-
-## 🚀 Deployment Checklist
-
-### Ready for Production ✅
-- [x] Backend API fully functional
-- [x] Admin dashboard fully functional
-- [x] Database schema stable
-- [x] No breaking changes
-- [x] Code follows existing patterns
-- [x] Error handling implemented
-
-### Before Going Live (Recommended) ⏳
-- [ ] Complete Phase 6 share integration
-- [ ] Add feature flags (Phase 7)
-- [ ] Add comprehensive tests (Phase 8)
-- [ ] Performance testing with large datasets
-- [ ] Security audit of admin endpoints
-- [ ] Documentation for end users
-
----
-
-## 📚 Documentation
-
-**Primary Documentation:**
-- `GROUP_GOVERNANCE_PLAN.md` - Comprehensive implementation plan with all decisions, trade-offs, and specifications
-
-**Code Documentation:**
-- All files include copyright headers
-- Models have docstrings
-- API endpoints have description metadata
-- Component classes have inline comments
-
----
+- [x] Indexes created for performance
 
 ## 🎯 Summary
 
-**What Works Now:**
-- ✅ Complete backend API for group management
-- ✅ Complete admin dashboard for group administration
-- ✅ Database schema with all relationships
-- ✅ Usage tracking foundation (tables ready for data)
+**Complete functionality currently present:**
+- Admin dashboard for group management (`/admin/groups`)
+- User groups API (create, list, view usage)
+- Share media to group workspace with reversible moves
+- Group gallery view with restore functionality (`/groups`)
+- Database schema with provenance tracking
+- Authorization checks for workspace ownership and group membership
 
-**What's Ready to Use:**
-- Admins can manage groups at `/admin/groups`
-- Backend API ready for integration
-- Share dialog component ready (needs wiring)
+**Primary follow-up work:**
+1. Re-scope admin UI so it only exposes Users and Usage Analytics.
+2. Move create/invite/group membership controls into User Management.
+3. Remove Virtual Try-On and Fun Templates from the visible UI.
+4. Fix broken gallery thumbnails and group member counts.
+5. Add the remaining post-rollout tests and manual validation.
 
-**What's Next:**
-- Wire up share dialog to gallery (2-3 hours)
-- Add feature flags (1 hour)
-- Add tests (4-8 hours)
-
-**Branch Status:** Ready for merge to `develop` or continue with Phase 6 integration.
+**Branch Status:** Ready for merge and deployment, with the follow-up plan above as the next iteration.

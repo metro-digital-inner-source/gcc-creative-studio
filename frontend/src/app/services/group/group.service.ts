@@ -61,6 +61,13 @@ export class GroupService {
   }
 
   /**
+   * Restore media items from a group to their original workspace
+   */
+  restoreItemsFromGroup(mediaItemIds: number[]): Observable<any> {
+    return this.http.post(`${this.apiUrl}/restore-items`, {mediaItemIds});
+  }
+
+  /**
    * Get usage statistics for the current user
    */
   getMyUsage(startDate?: string, endDate?: string): Observable<MyUsageResponse> {
@@ -109,6 +116,13 @@ export class GroupService {
       null,
       {params},
     );
+  }
+
+  /**
+   * Delete a group (admin only)
+   */
+  deleteGroupAdmin(groupId: number): Observable<any> {
+    return this.http.delete(`${this.adminApiUrl}/${groupId}`);
   }
 
   /**
