@@ -91,26 +91,25 @@ jobs:
         with:
           terraform_version: 1.9.0
 
-      - name: Authenticate to Google Cloud (dev)
-        if: needs.detect-env.outputs.environment == 'dev'
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.TF_WIF_PROVIDER_DEV }}
-          service_account: ${{ secrets.TF_SA_EMAIL_DEV }}
+      - name: Resolve auth inputs
+        id: auth-inputs
+        env:
+          TF_WIF_PROVIDER: ${{ needs.detect-env.outputs.environment == 'dev' && (secrets.TF_WIF_PROVIDER_DEV || secrets.TF_WIF_PROVIDER_dev) || needs.detect-env.outputs.environment == 'pp' && (secrets.TF_WIF_PROVIDER_PP || secrets.TF_WIF_PROVIDER_pp) || (secrets.TF_WIF_PROVIDER_PROD || secrets.TF_WIF_PROVIDER_prod) }}
+          TF_SA_EMAIL: ${{ needs.detect-env.outputs.environment == 'dev' && (secrets.TF_SA_EMAIL_DEV || secrets.TF_SA_EMAIL_dev) || needs.detect-env.outputs.environment == 'pp' && (secrets.TF_SA_EMAIL_PP || secrets.TF_SA_EMAIL_pp) || (secrets.TF_SA_EMAIL_PROD || secrets.TF_SA_EMAIL_prod) }}
+        run: |
+          if [[ -z "$TF_WIF_PROVIDER" || -z "$TF_SA_EMAIL" ]]; then
+            echo "Missing Terraform WIF secrets for environment '${{ needs.detect-env.outputs.environment }}'."
+            echo "Expected one of: TF_WIF_PROVIDER_DEV/dev, TF_SA_EMAIL_DEV/dev (or PP/pp, PROD/prod)."
+            exit 1
+          fi
+          echo "workload_identity_provider=$TF_WIF_PROVIDER" >> "$GITHUB_OUTPUT"
+          echo "service_account=$TF_SA_EMAIL" >> "$GITHUB_OUTPUT"
 
-      - name: Authenticate to Google Cloud (pp)
-        if: needs.detect-env.outputs.environment == 'pp'
+      - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.TF_WIF_PROVIDER_PP }}
-          service_account: ${{ secrets.TF_SA_EMAIL_PP }}
-
-      - name: Authenticate to Google Cloud (prod)
-        if: needs.detect-env.outputs.environment == 'prod'
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.TF_WIF_PROVIDER_PROD }}
-          service_account: ${{ secrets.TF_SA_EMAIL_PROD }}
+          workload_identity_provider: ${{ steps.auth-inputs.outputs.workload_identity_provider }}
+          service_account: ${{ steps.auth-inputs.outputs.service_account }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -171,26 +170,25 @@ jobs:
         with:
           terraform_version: 1.9.0
 
-      - name: Authenticate to Google Cloud (dev)
-        if: needs.detect-env.outputs.environment == 'dev'
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.TF_WIF_PROVIDER_DEV }}
-          service_account: ${{ secrets.TF_SA_EMAIL_DEV }}
+      - name: Resolve auth inputs
+        id: auth-inputs
+        env:
+          TF_WIF_PROVIDER: ${{ needs.detect-env.outputs.environment == 'dev' && (secrets.TF_WIF_PROVIDER_DEV || secrets.TF_WIF_PROVIDER_dev) || needs.detect-env.outputs.environment == 'pp' && (secrets.TF_WIF_PROVIDER_PP || secrets.TF_WIF_PROVIDER_pp) || (secrets.TF_WIF_PROVIDER_PROD || secrets.TF_WIF_PROVIDER_prod) }}
+          TF_SA_EMAIL: ${{ needs.detect-env.outputs.environment == 'dev' && (secrets.TF_SA_EMAIL_DEV || secrets.TF_SA_EMAIL_dev) || needs.detect-env.outputs.environment == 'pp' && (secrets.TF_SA_EMAIL_PP || secrets.TF_SA_EMAIL_pp) || (secrets.TF_SA_EMAIL_PROD || secrets.TF_SA_EMAIL_prod) }}
+        run: |
+          if [[ -z "$TF_WIF_PROVIDER" || -z "$TF_SA_EMAIL" ]]; then
+            echo "Missing Terraform WIF secrets for environment '${{ needs.detect-env.outputs.environment }}'."
+            echo "Expected one of: TF_WIF_PROVIDER_DEV/dev, TF_SA_EMAIL_DEV/dev (or PP/pp, PROD/prod)."
+            exit 1
+          fi
+          echo "workload_identity_provider=$TF_WIF_PROVIDER" >> "$GITHUB_OUTPUT"
+          echo "service_account=$TF_SA_EMAIL" >> "$GITHUB_OUTPUT"
 
-      - name: Authenticate to Google Cloud (pp)
-        if: needs.detect-env.outputs.environment == 'pp'
+      - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.TF_WIF_PROVIDER_PP }}
-          service_account: ${{ secrets.TF_SA_EMAIL_PP }}
-
-      - name: Authenticate to Google Cloud (prod)
-        if: needs.detect-env.outputs.environment == 'prod'
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.TF_WIF_PROVIDER_PROD }}
-          service_account: ${{ secrets.TF_SA_EMAIL_PROD }}
+          workload_identity_provider: ${{ steps.auth-inputs.outputs.workload_identity_provider }}
+          service_account: ${{ steps.auth-inputs.outputs.service_account }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -210,14 +208,5 @@ jobs:
         working-directory: infra/environments/${{ needs.detect-env.outputs.environment }}
         run: terraform apply tfplan
 
-      - name: Post apply summary to commit
-        uses: actions/github-script@v7
-        if: always()
-        with:
-          script: |
-            github.rest.repos.createCommitComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: context.sha,
-              body: `Terraform apply result for **${{ needs.detect-env.outputs.environment }}** (Project: ${{ needs.detect-env.outputs.gcp-project }}).`
-            });
+      # Intentionally omitted post-apply commit comments to keep deploy path
+      # independent from comment API permissions and syntax/runtime errors.
