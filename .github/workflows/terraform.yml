@@ -98,6 +98,13 @@ jobs:
           TF_WIF_PROVIDER: ${{ needs.detect-env.outputs.environment == 'dev' && (secrets.TF_WIF_PROVIDER_DEV || secrets.TF_WIF_PROVIDER_dev) || needs.detect-env.outputs.environment == 'pp' && (secrets.TF_WIF_PROVIDER_PP || secrets.TF_WIF_PROVIDER_pp) || (secrets.TF_WIF_PROVIDER_PROD || secrets.TF_WIF_PROVIDER_prod) }}
           TF_SA_EMAIL: ${{ needs.detect-env.outputs.environment == 'dev' && (secrets.TF_SA_EMAIL_DEV || secrets.TF_SA_EMAIL_dev) || needs.detect-env.outputs.environment == 'pp' && (secrets.TF_SA_EMAIL_PP || secrets.TF_SA_EMAIL_pp) || (secrets.TF_SA_EMAIL_PROD || secrets.TF_SA_EMAIL_prod) }}
         run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "auth_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping remote Terraform plan auth on pull_request."
+            echo "Authenticated Terraform plan remains enforced on push/workflow_dispatch."
+            exit 0
+          fi
+
           if [[ -z "$TF_WIF_PROVIDER" || -z "$TF_SA_EMAIL" ]]; then
             echo "auth_enabled=false" >> "$GITHUB_OUTPUT"
             echo "Missing Terraform WIF secrets for environment '${{ needs.detect-env.outputs.environment }}'."
