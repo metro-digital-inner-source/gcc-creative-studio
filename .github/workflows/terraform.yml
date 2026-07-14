@@ -159,7 +159,7 @@ jobs:
     name: Terraform Apply
     runs-on: ubuntu-latest
     needs: detect-env
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     environment: ${{ needs.detect-env.outputs.environment }}
     steps:
       - name: Checkout code

@@ -116,7 +116,6 @@ else
     --project="${GCP_PROJECT_ID}" \
     --location="${WIF_POOL_LOCATION}" \
     --display-name="GitHub Actions Pool" \
-    --disabled=false \
     --quiet
   echo "  ✓ WIF Pool created"
 fi

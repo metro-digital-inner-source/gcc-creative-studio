@@ -48,7 +48,7 @@ class TestCreateUserIfNotExists:
 
         # Action: Call service method
         result = await user_service.create_user_if_not_exists(
-            email="user@example.com",
+            email=" User@Example.com ",
             name="Regular User",
             picture="",
         )
@@ -70,7 +70,7 @@ class TestCreateUserIfNotExists:
 
         # Action: Call service method
         result = await user_service.create_user_if_not_exists(
-            email="new@example.com",
+            email=" New@Example.com ",
             name="New User",
             picture="http://pic.jpg",
         )
@@ -84,6 +84,21 @@ class TestCreateUserIfNotExists:
         assert called_args["email"] == "new@example.com"
         assert called_args["name"] == "New User"
         assert called_args["roles"] == [UserRoleEnum.USER]
+
+    @pytest.mark.anyio
+    async def test_existing_user_with_case_mismatch(
+        self, user_service, mock_user_repo, mock_user
+    ):
+        mock_user_repo.get_by_email.return_value = mock_user
+
+        result = await user_service.create_user_if_not_exists(
+            email="USER@EXAMPLE.COM",
+            name="Regular User",
+            picture=None,
+        )
+
+        assert result == mock_user
+        mock_user_repo.get_by_email.assert_called_once_with("user@example.com")
 
 
 class TestGetUserById:

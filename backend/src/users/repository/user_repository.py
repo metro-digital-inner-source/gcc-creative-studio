@@ -32,8 +32,11 @@ class UserRepository(BaseRepository[User, UserModel]):
 
     async def get_by_email(self, email: str) -> UserModel | None:
         """Finds a single user by their email address."""
+        normalized_email = email.strip().lower()
         result = await self.db.execute(
-            select(self.model).where(self.model.email == email),
+            select(self.model).where(
+                func.lower(self.model.email) == normalized_email
+            ),
         )
         user = result.scalar_one_or_none()
         if not user:

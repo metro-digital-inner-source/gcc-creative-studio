@@ -95,10 +95,13 @@ async def get_current_user(
                 audience=google_token_audience,
             )
 
-        email = decoded_token.get("email")
+        token_email = decoded_token.get("email")
         name = decoded_token.get("name")
         picture = decoded_token.get("picture", "")
         token_info_hd = decoded_token.get("hd")
+
+        email = token_email.strip().lower() if token_email else None
+        normalized_hd = token_info_hd.strip().lower() if token_info_hd else None
 
         # Restrict by particular organizations if it's a closed environment
         if not email:
@@ -118,7 +121,9 @@ async def get_current_user(
                 is_allowed = True
 
         if not is_allowed and config_service.ALLOWED_ORGS:
-            if token_info_hd and token_info_hd in config_service.ALLOWED_ORGS:
+            if normalized_hd and normalized_hd in {
+                org.lower() for org in config_service.ALLOWED_ORGS
+            }:
                 is_allowed = True
 
         # If at least one restriction is configured and user is not allowed, reject.
