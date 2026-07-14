@@ -123,6 +123,34 @@ class TestGetCurrentUser:
             in exc_info.value.detail
         )
 
+    @pytest.mark.anyio
+    @patch("src.auth.auth_guard.auth.verify_id_token")
+    async def test_get_current_user_allowed_email_case_insensitive(
+        self, mock_verify, mock_user_service, mock_request
+    ):
+        config_service.ENVIRONMENT = "local"
+        config_service.ALLOWED_ORGS_STR = ""
+        config_service.ALLOWED_EMAILS_STR = "user@example.com"
+
+        mock_verify.return_value = {
+            "email": " User@Example.com ",
+            "name": "Case User",
+            "picture": "",
+        }
+
+        user = await get_current_user(
+            request=mock_request,
+            token="valid_token",
+            user_service=mock_user_service,
+        )
+
+        assert user.email == "test@example.com"
+        mock_user_service.create_user_if_not_exists.assert_called_once_with(
+            email="user@example.com",
+            name="Case User",
+            picture="",
+        )
+
 
 class TestRoleChecker:
     """Tests for RoleChecker class."""

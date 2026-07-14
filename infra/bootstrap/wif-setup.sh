@@ -23,11 +23,11 @@ set -euo pipefail
 # Usage: ./wif-setup.sh <GCP_PROJECT_ID> <GITHUB_REPO_OWNER> <GITHUB_REPO_NAME> <ENVIRONMENT> <BRANCH>
 #
 # Example:
-#   ./wif-setup.sh cf-genaistudi-genai-studio--vm metro-digital-inner-source gcc-creative-studio dev develop
+#   ./wif-setup.sh cf-genaistudi-genai-studio--gv metro-digital-inner-source gcc-creative-studio dev develop
 
 if [[ $# -lt 5 ]]; then
   echo "Usage: $0 <GCP_PROJECT_ID> <GITHUB_REPO_OWNER> <GITHUB_REPO_NAME> <ENVIRONMENT> <BRANCH>"
-  echo "Example: $0 cf-genaistudi-genai-studio--vm metro-digital-inner-source gcc-creative-studio dev develop"
+  echo "Example: $0 cf-genaistudi-genai-studio--gv metro-digital-inner-source gcc-creative-studio dev develop"
   exit 1
 fi
 
@@ -58,6 +58,14 @@ echo "=========================================="
 # Step 1: Set the current project
 echo "[1/8] Setting current GCP project..."
 gcloud config set project "${GCP_PROJECT_ID}"
+
+# Resolve project number for WIF resource names. The audience and principalSet
+# paths must use project number, not project ID.
+GCP_PROJECT_NUMBER=$(gcloud projects describe "${GCP_PROJECT_ID}" --format="value(projectNumber)")
+if [[ -z "${GCP_PROJECT_NUMBER}" ]]; then
+  echo "  ❌ Could not resolve project number for ${GCP_PROJECT_ID}"
+  exit 1
+fi
 
 # Step 2: Create Terraform Service Account
 echo "[2/8] Creating Terraform service account..."
@@ -105,7 +113,7 @@ echo "  ✓ APIs enabled"
 
 # Step 5: Create Workload Identity Pool
 echo "[5/8] Creating Workload Identity Pool..."
-WIF_POOL_RESOURCE="projects/${GCP_PROJECT_ID}/locations/${WIF_POOL_LOCATION}/workloadIdentityPools/${WIF_POOL_ID}"
+WIF_POOL_RESOURCE="projects/${GCP_PROJECT_NUMBER}/locations/${WIF_POOL_LOCATION}/workloadIdentityPools/${WIF_POOL_ID}"
 
 if gcloud iam workload-identity-pools describe "${WIF_POOL_ID}" \
   --project="${GCP_PROJECT_ID}" \
@@ -116,7 +124,6 @@ else
     --project="${GCP_PROJECT_ID}" \
     --location="${WIF_POOL_LOCATION}" \
     --display-name="GitHub Actions Pool" \
-    --disabled=false \
     --quiet
   echo "  ✓ WIF Pool created"
 fi
@@ -142,16 +149,25 @@ else
 fi
 
 # Step 7: Create Workload Identity Binding
-echo "[7/8] Creating Workload Identity Binding for ${BRANCH}..."
-BINDING_NAME="${TF_SA_NAME}-${ENVIRONMENT}"
+echo "[7/8] Creating Workload Identity Binding for ${GITHUB_REPO_FULL}..."
+
+# Remove the legacy branch-conditional binding if it exists.
+LEGACY_BINDING_TITLE="${TF_SA_NAME}-${ENVIRONMENT}"
+LEGACY_CONDITION="expression=assertion.ref == 'refs/heads/${BRANCH}',title=${LEGACY_BINDING_TITLE}"
+
+gcloud iam service-accounts remove-iam-policy-binding "${TF_SA_EMAIL}" \
+  --project="${GCP_PROJECT_ID}" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/${WIF_POOL_RESOURCE}/attribute.repository/${GITHUB_REPO_FULL}" \
+  --condition="${LEGACY_CONDITION}" \
+  --quiet 2>/dev/null || true
 
 gcloud iam service-accounts add-iam-policy-binding "${TF_SA_EMAIL}" \
   --project="${GCP_PROJECT_ID}" \
   --role="roles/iam.workloadIdentityUser" \
   --member="principalSet://iam.googleapis.com/${WIF_POOL_RESOURCE}/attribute.repository/${GITHUB_REPO_FULL}" \
-  --condition="expression=assertion.ref == 'refs/heads/${BRANCH}',title=${BINDING_NAME}" \
   --quiet
-echo "  ✓ Binding created for branch: ${BRANCH}"
+echo "  ✓ Binding created for repository: ${GITHUB_REPO_FULL}"
 
 # Step 8: Output the configuration
 echo "[8/8] Configuration Summary"

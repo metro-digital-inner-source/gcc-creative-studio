@@ -42,7 +42,13 @@ jobs:
       - name: 'Checkout repository'
         uses: 'actions/checkout@v4'
 
+      - name: 'Skip Gemini review when API key is missing'
+        if: ${{ secrets.GEMINI_API_KEY == '' }}
+        run: |
+          echo 'GEMINI_API_KEY is not configured. Skipping Gemini review for this run.'
+
       - name: 'Run Gemini pull request review'
+        if: ${{ secrets.GEMINI_API_KEY != '' }}
         uses: 'google-github-actions/run-gemini-cli@v0'
         id: 'gemini_pr_review'
         env:

@@ -313,7 +313,7 @@ class GalleryService:
                 asyncio.gather(*url_tasks),
                 asyncio.gather(*thumbnail_tasks),
             )
-            
+
             # Log success for debugging
             logger.info(
                 f"Generated {len(presigned_urls)} presigned URLs and "

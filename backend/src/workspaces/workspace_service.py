@@ -94,7 +94,8 @@ class WorkspaceService:
             )
 
         # 2. Find the user to be invited by their email
-        invited_user = await self.user_repo.get_by_email(invite_dto.email)
+        invited_email = invite_dto.email.strip().lower()
+        invited_user = await self.user_repo.get_by_email(invited_email)
         if not invited_user:
             return None  # Or raise an exception (e.g., UserNotFound)
 

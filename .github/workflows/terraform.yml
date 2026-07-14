@@ -36,6 +36,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
   pull-requests: write
 
 jobs:
@@ -97,28 +98,54 @@ jobs:
           TF_WIF_PROVIDER: ${{ needs.detect-env.outputs.environment == 'dev' && (secrets.TF_WIF_PROVIDER_DEV || secrets.TF_WIF_PROVIDER_dev) || needs.detect-env.outputs.environment == 'pp' && (secrets.TF_WIF_PROVIDER_PP || secrets.TF_WIF_PROVIDER_pp) || (secrets.TF_WIF_PROVIDER_PROD || secrets.TF_WIF_PROVIDER_prod) }}
           TF_SA_EMAIL: ${{ needs.detect-env.outputs.environment == 'dev' && (secrets.TF_SA_EMAIL_DEV || secrets.TF_SA_EMAIL_dev) || needs.detect-env.outputs.environment == 'pp' && (secrets.TF_SA_EMAIL_PP || secrets.TF_SA_EMAIL_pp) || (secrets.TF_SA_EMAIL_PROD || secrets.TF_SA_EMAIL_prod) }}
         run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "auth_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping remote Terraform plan auth on pull_request."
+            echo "Authenticated Terraform plan remains enforced on push/workflow_dispatch."
+            exit 0
+          fi
+
           if [[ -z "$TF_WIF_PROVIDER" || -z "$TF_SA_EMAIL" ]]; then
+            echo "auth_enabled=false" >> "$GITHUB_OUTPUT"
             echo "Missing Terraform WIF secrets for environment '${{ needs.detect-env.outputs.environment }}'."
-            echo "Expected one of: TF_WIF_PROVIDER_DEV/dev, TF_SA_EMAIL_DEV/dev (or PP/pp, PROD/prod)."
+            echo "Skipping terraform-plan for this PR run."
+            exit 0
+          fi
+
+          if [[ ! "$TF_WIF_PROVIDER" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$ ]]; then
+            echo "Invalid TF_WIF_PROVIDER format: $TF_WIF_PROVIDER"
+            echo "Expected: projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/<POOL_ID>/providers/<PROVIDER_ID>"
+            echo "Fix by re-running infra/bootstrap/wif-setup.sh and updating GitHub secret TF_WIF_PROVIDER_*"
             exit 1
           fi
+
+          echo "auth_enabled=true" >> "$GITHUB_OUTPUT"
           echo "workload_identity_provider=$TF_WIF_PROVIDER" >> "$GITHUB_OUTPUT"
           echo "service_account=$TF_SA_EMAIL" >> "$GITHUB_OUTPUT"
 
+      - name: Skip plan when auth is unavailable
+        if: ${{ steps.auth-inputs.outputs.auth_enabled != 'true' }}
+        run: |
+          echo "Terraform plan was skipped because WIF secrets are not configured for this environment."
+
       - name: Authenticate to Google Cloud
+        if: ${{ steps.auth-inputs.outputs.auth_enabled == 'true' }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ steps.auth-inputs.outputs.workload_identity_provider }}
           service_account: ${{ steps.auth-inputs.outputs.service_account }}
 
       - name: Set up Cloud SDK
+        if: ${{ steps.auth-inputs.outputs.auth_enabled == 'true' }}
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Initialize Terraform
+        if: ${{ steps.auth-inputs.outputs.auth_enabled == 'true' }}
         working-directory: infra/environments/${{ needs.detect-env.outputs.environment }}
         run: terraform init
 
       - name: Run Terraform Plan
+        if: ${{ steps.auth-inputs.outputs.auth_enabled == 'true' }}
         working-directory: infra/environments/${{ needs.detect-env.outputs.environment }}
         run: |
           terraform plan \
@@ -127,12 +154,14 @@ jobs:
 
       - name: Generate Terraform Plan Summary
         id: plan-summary
+        if: ${{ steps.auth-inputs.outputs.auth_enabled == 'true' }}
         working-directory: infra/environments/${{ needs.detect-env.outputs.environment }}
         run: |
           terraform show -no-color tfplan > plan_output.txt
           cat plan_output.txt
 
       - name: Post plan to PR
+        if: ${{ steps.auth-inputs.outputs.auth_enabled == 'true' }}
         uses: actions/github-script@v7
         with:
           script: |
@@ -159,7 +188,7 @@ jobs:
     name: Terraform Apply
     runs-on: ubuntu-latest
     needs: detect-env
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     environment: ${{ needs.detect-env.outputs.environment }}
     steps:
       - name: Checkout code
@@ -181,6 +210,15 @@ jobs:
             echo "Expected one of: TF_WIF_PROVIDER_DEV/dev, TF_SA_EMAIL_DEV/dev (or PP/pp, PROD/prod)."
             exit 1
           fi
+
+          if [[ ! "$TF_WIF_PROVIDER" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$ ]]; then
+            echo "Invalid TF_WIF_PROVIDER format: $TF_WIF_PROVIDER"
+            echo "Expected: projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/<POOL_ID>/providers/<PROVIDER_ID>"
+            echo "Fix by re-running infra/bootstrap/wif-setup.sh and updating GitHub secret TF_WIF_PROVIDER_*"
+            exit 1
+          fi
+
+          echo "auth_enabled=true" >> "$GITHUB_OUTPUT"
           echo "workload_identity_provider=$TF_WIF_PROVIDER" >> "$GITHUB_OUTPUT"
           echo "service_account=$TF_SA_EMAIL" >> "$GITHUB_OUTPUT"
 

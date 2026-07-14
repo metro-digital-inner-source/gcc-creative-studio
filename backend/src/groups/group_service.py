@@ -70,7 +70,7 @@ class GroupService:
         creator: UserModel,
     ) -> GroupModel:
         """Creates a new group with a dedicated shared workspace.
-        
+
         The creator is automatically added as an admin member.
         """
         # 1. Create a dedicated workspace for the group
@@ -108,7 +108,7 @@ class GroupService:
         requester: UserModel,
     ) -> GroupModel:
         """Adds a member to a group.
-        
+
         Authorization: Group admins or platform admins can add members.
         """
         # 1. Check if requester is allowed to manage this group.
@@ -177,7 +177,9 @@ class GroupService:
             )
 
         # 2. Get the group to access shared_workspace_id
-        group = await self.group_repo.get_by_id_with_members(share_request.group_id)
+        group = await self.group_repo.get_by_id_with_members(
+            share_request.group_id
+        )
         if not group:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -217,7 +219,10 @@ class GroupService:
                     detail=f"You cannot move media item {media_item.id}.",
                 )
 
-            if media_item.moved_to_group_id not in (None, share_request.group_id):
+            if media_item.moved_to_group_id not in (
+                None,
+                share_request.group_id,
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=(
@@ -362,8 +367,12 @@ class GroupService:
             user_spend_usd=user_usage.get("user_spend_usd", 0.0),
             user_tokens_consumed=user_usage.get("user_tokens_consumed", 0),
             user_activity_count=user_usage.get("user_activity_count", 0),
-            group_total_spend_usd=group_total["spend_usd"] if group_total else 0.0,
-            group_total_tokens=group_total["tokens_consumed"] if group_total else 0,
+            group_total_spend_usd=(
+                group_total["spend_usd"] if group_total else 0.0
+            ),
+            group_total_tokens=(
+                group_total["tokens_consumed"] if group_total else 0
+            ),
         )
 
     # Admin methods

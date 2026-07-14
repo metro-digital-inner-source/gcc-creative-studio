@@ -136,6 +136,7 @@ async def cleanup_stuck_jobs(admin_service: AdminService = Depends()):
 
 # Group Management Endpoints
 
+
 @router.get("/groups")
 async def get_all_groups(admin_service: AdminService = Depends()):
     """Retrieves all groups (admin view)."""
@@ -166,7 +167,9 @@ async def add_user_to_group(
     current_user: UserModel = Depends(get_current_user),
 ):
     """Adds a user to a group (admin action)."""
-    return await admin_service.add_user_to_group(group_id, user_id, role, current_user)
+    return await admin_service.add_user_to_group(
+        group_id, user_id, role, current_user
+    )
 
 
 @router.delete("/groups/{group_id}")

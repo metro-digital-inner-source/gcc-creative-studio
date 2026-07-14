@@ -17,7 +17,15 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Numeric, String, func
+from sqlalchemy import (
+    BigInteger,
+    Date,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.common.base_repository import BaseDocument
@@ -33,7 +41,7 @@ class GroupMemberRoleEnum(str, Enum):
 
 class Group(Base):
     """SQLAlchemy model for the 'groups' table.
-    
+
     Groups provide governance and organizational boundaries.
     Each group has a 1:1 relationship with a shared workspace.
     """
@@ -73,7 +81,7 @@ class Group(Base):
 
 class GroupMember(Base):
     """SQLAlchemy model for the 'group_members' table.
-    
+
     Association table for the many-to-many relationship between
     Users and Groups, storing the role of the user in the group.
     """
@@ -100,7 +108,7 @@ class GroupMember(Base):
 
 class GroupUsageDaily(Base):
     """SQLAlchemy model for the 'group_usage_daily' table.
-    
+
     Stores daily aggregated usage metrics per group for analytics.
     """
 

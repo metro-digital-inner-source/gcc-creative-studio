@@ -150,7 +150,7 @@ class ConfigService(BaseSettings):
     @property
     def ALLOWED_EMAILS(self) -> set[str]:
         return set(
-            email.strip()
+            email.strip().lower()
             for email in self.ALLOWED_EMAILS_STR.split(",")
             if email.strip()
         )
