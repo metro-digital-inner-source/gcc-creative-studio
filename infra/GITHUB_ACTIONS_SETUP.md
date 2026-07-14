@@ -27,27 +27,27 @@ chmod +x wif-setup.sh
 ./wif-setup.sh <GCP_PROJECT_ID> <GITHUB_REPO_OWNER> <GITHUB_REPO_NAME> <ENVIRONMENT> <BRANCH>
 
 # Example:
-./wif-setup.sh cf-genaistudi-genai-studio--vm metro-digital-inner-source gcc-creative-studio dev develop
-./wif-setup.sh cf-genaistudi-genai-studio--7u metro-digital-inner-source gcc-creative-studio pp test
-./wif-setup.sh cf-genaistudi-genai-studio--gv metro-digital-inner-source gcc-creative-studio prod main
+./wif-setup.sh cf-genaistudi-genai-studio--gv metro-digital-inner-source gcc-creative-studio dev develop
+./wif-setup.sh cf-genaistudi-genai-studio--vm metro-digital-inner-source gcc-creative-studio pp test
+./wif-setup.sh cf-genaistudi-genai-studio--7u metro-digital-inner-source gcc-creative-studio prod main
 ```
 
 ### 2. Terraform Environment Configurations
 
 **Three new environment directories created**:
 
-- **`infra/environments/dev/`** — Development (branch: `develop`, project: `cf-genaistudi-genai-studio--vm`)
-  - GCS state bucket: `cf-genaistudi-genai-studio--vm-tfstate`
+- **`infra/environments/dev/`** — Development (branch: `develop`, project: `cf-genaistudi-genai-studio--gv`)
+  - GCS state bucket: `cf-genaistudi-genai-studio--gv-tfstate`
   - Backend/Frontend service names: `cstudio-backend-dev`, `cstudio-frontend-dev`
   - Firebase site: `cstudio-dev-metro`
 
-- **`infra/environments/pp/`** — Pre-production (branch: `test`, project: `cf-genaistudi-genai-studio--7u`)
-  - GCS state bucket: `cf-genaistudi-genai-studio--7u-tfstate`
+- **`infra/environments/pp/`** — Pre-production (branch: `test`, project: `cf-genaistudi-genai-studio--vm`)
+  - GCS state bucket: `cf-genaistudi-genai-studio--vm-tfstate`
   - Backend/Frontend service names: `cstudio-backend-pp`, `cstudio-frontend-pp`
   - Firebase site: `cstudio-pp-metro`
 
-- **`infra/environments/prod/`** — Production (branch: `main`, project: `cf-genaistudi-genai-studio--gv`)
-  - GCS state bucket: `cf-genaistudi-genai-studio--gv-tfstate`
+- **`infra/environments/prod/`** — Production (branch: `main`, project: `cf-genaistudi-genai-studio--7u`)
+  - GCS state bucket: `cf-genaistudi-genai-studio--7u-tfstate`
   - Backend/Frontend service names: `cstudio-backend-prod`, `cstudio-frontend-prod`
   - Firebase site: `cstudio-prod-metro`
   - Higher resource allocation: `be_cpu=2`, `be_memory=1Gi` (vs dev `be_cpu=1`, `be_memory=512Mi`)
@@ -79,16 +79,16 @@ Create three Google Cloud Storage buckets for Terraform state (one per GCP proje
 
 ```bash
 # Development
+gsutil mb -p cf-genaistudi-genai-studio--gv gs://cf-genaistudi-genai-studio--gv-tfstate
+gsutil versioning set on gs://cf-genaistudi-genai-studio--gv-tfstate
+
+# Pre-production
 gsutil mb -p cf-genaistudi-genai-studio--vm gs://cf-genaistudi-genai-studio--vm-tfstate
 gsutil versioning set on gs://cf-genaistudi-genai-studio--vm-tfstate
 
-# Pre-production
+# Production
 gsutil mb -p cf-genaistudi-genai-studio--7u gs://cf-genaistudi-genai-studio--7u-tfstate
 gsutil versioning set on gs://cf-genaistudi-genai-studio--7u-tfstate
-
-# Production
-gsutil mb -p cf-genaistudi-genai-studio--gv gs://cf-genaistudi-genai-studio--gv-tfstate
-gsutil versioning set on gs://cf-genaistudi-genai-studio--gv-tfstate
 ```
 
 ### Step 2: Create Cloud Build GitHub Connections
@@ -112,13 +112,13 @@ For each GCP project, authenticate and run the WIF setup script:
 gcloud auth login
 
 # Development
-./infra/bootstrap/wif-setup.sh cf-genaistudi-genai-studio--vm metro-digital-inner-source gcc-creative-studio dev develop
+./infra/bootstrap/wif-setup.sh cf-genaistudi-genai-studio--gv metro-digital-inner-source gcc-creative-studio dev develop
 
 # Pre-production
-./infra/bootstrap/wif-setup.sh cf-genaistudi-genai-studio--7u metro-digital-inner-source gcc-creative-studio pp test
+./infra/bootstrap/wif-setup.sh cf-genaistudi-genai-studio--vm metro-digital-inner-source gcc-creative-studio pp test
 
 # Production
-./infra/bootstrap/wif-setup.sh cf-genaistudi-genai-studio--gv metro-digital-inner-source gcc-creative-studio prod main
+./infra/bootstrap/wif-setup.sh cf-genaistudi-genai-studio--7u metro-digital-inner-source gcc-creative-studio prod main
 ```
 
 **Output**: The script prints GitHub Secrets that need to be configured (see Step 4).
@@ -129,7 +129,7 @@ In your GitHub repository settings (`Settings` → `Secrets and variables` → `
 
 **From `dev` WIF bootstrap**:
 - `TF_WIF_PROVIDER_DEV` — WIF provider resource path (e.g., `projects/12345/locations/global/workloadIdentityPools/github-pool/providers/github-provider`)
-- `TF_SA_EMAIL_DEV` — Terraform SA email (e.g., `terraform-sa@cf-genaistudi-genai-studio--vm.iam.gserviceaccount.com`)
+- `TF_SA_EMAIL_DEV` — Terraform SA email (e.g., `terraform-sa@cf-genaistudi-genai-studio--gv.iam.gserviceaccount.com`)
 
 **From `pp` WIF bootstrap**:
 - `TF_WIF_PROVIDER_PP`
@@ -150,11 +150,11 @@ For each GCP project, pre-load the Firebase and OAuth secrets that the build pro
 # Example for development project — adjust for each environment/project
 gcloud secrets create FIREBASE_API_KEY \
   --data-file=- \
-  --project=cf-genaistudi-genai-studio--vm <<< "YOUR_FIREBASE_API_KEY"
+  --project=cf-genaistudi-genai-studio--gv <<< "YOUR_FIREBASE_API_KEY"
 
 gcloud secrets create FIREBASE_AUTH_DOMAIN \
   --data-file=- \
-  --project=cf-genaistudi-genai-studio--vm <<< "creative-studio-dev.firebaseapp.com"
+  --project=cf-genaistudi-genai-studio--gv <<< "creative-studio-dev.firebaseapp.com"
 
 # ... (repeat for all frontend_secrets and backend_secrets listed in tfvars)
 ```
@@ -170,8 +170,8 @@ Each `{env}.tfvars` file has placeholder values that must be customized:
 ### `infra/environments/dev/dev.tfvars`
 ```hcl
 # TODO: Replace placeholders
-backend_custom_audiences  = ["YOUR_OAUTH_WEB_CLIENT_ID_HERE", "cf-genaistudi-genai-studio--vm"]
-frontend_custom_audiences = ["YOUR_OAUTH_WEB_CLIENT_ID_HERE", "cf-genaistudi-genai-studio--vm"]
+backend_custom_audiences  = ["YOUR_OAUTH_WEB_CLIENT_ID_HERE", "cf-genaistudi-genai-studio--gv"]
+frontend_custom_audiences = ["YOUR_OAUTH_WEB_CLIENT_ID_HERE", "cf-genaistudi-genai-studio--gv"]
 # ... (GOOGLE_TOKEN_AUDIENCE, IDENTITY_PLATFORM_ALLOWED_ORGS, Firebase credentials)
 ```
 

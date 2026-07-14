@@ -23,11 +23,11 @@ set -euo pipefail
 # Usage: ./wif-setup.sh <GCP_PROJECT_ID> <GITHUB_REPO_OWNER> <GITHUB_REPO_NAME> <ENVIRONMENT> <BRANCH>
 #
 # Example:
-#   ./wif-setup.sh cf-genaistudi-genai-studio--vm metro-digital-inner-source gcc-creative-studio dev develop
+#   ./wif-setup.sh cf-genaistudi-genai-studio--gv metro-digital-inner-source gcc-creative-studio dev develop
 
 if [[ $# -lt 5 ]]; then
   echo "Usage: $0 <GCP_PROJECT_ID> <GITHUB_REPO_OWNER> <GITHUB_REPO_NAME> <ENVIRONMENT> <BRANCH>"
-  echo "Example: $0 cf-genaistudi-genai-studio--vm metro-digital-inner-source gcc-creative-studio dev develop"
+  echo "Example: $0 cf-genaistudi-genai-studio--gv metro-digital-inner-source gcc-creative-studio dev develop"
   exit 1
 fi
 
