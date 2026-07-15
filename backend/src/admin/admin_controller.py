@@ -234,3 +234,24 @@ async def get_group_usage_breakdown(
 ):
     """Retrieves per-group usage breakdown."""
     return await admin_service.get_group_usage_breakdown(start_date, end_date)
+
+
+@router.post("/dev/reset-database")
+async def dev_reset_database(
+    current_user: UserModel = Depends(
+        RoleChecker(allowed_roles=[UserRoleEnum.ADMIN])
+    ),
+    admin_service: AdminService = Depends(),
+):
+    """DEV ONLY: Reset all application data (truncate all tables).
+    
+    This endpoint is only available in dev/local environments and requires
+    admin privileges. Use to start fresh testing after deployment.
+    """
+    if config_service.ENVIRONMENT not in ["development", "local"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint is only available in development/local environments.",
+        )
+
+    return await admin_service.reset_dev_database()
