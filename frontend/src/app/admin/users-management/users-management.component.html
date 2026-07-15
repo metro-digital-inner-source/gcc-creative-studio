@@ -197,14 +197,6 @@
               <mat-icon>edit</mat-icon>
             </button>
             <button
-              mat-icon-button
-              color="accent"
-              (click)="openAddUserToGroupDialog(node.member); $event.stopPropagation()"
-              matTooltip="Add to Another Group"
-            >
-              <mat-icon>group_add</mat-icon>
-            </button>
-            <button
               *ngIf="node.member?.userId !== currentUserId"
               mat-icon-button
               color="warn"
