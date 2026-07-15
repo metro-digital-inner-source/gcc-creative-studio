@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -174,6 +175,38 @@ class TestRoleChecker:
             email="user@example.com",
             roles=["user"],
             name="Regular User",
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            checker(user=user)
+
+        assert exc_info.value.status_code == 403
+        assert "do not have sufficient permissions" in exc_info.value.detail
+
+    def test_role_checker_allowed_email_authorized(self):
+        checker = RoleChecker(
+            allowed_roles=[UserRoleEnum.ADMIN],
+            allowed_emails={"owner@example.com"},
+        )
+        user = UserModel(
+            id=1,
+            email="OWNER@example.com",
+            roles=["admin"],
+            name="Owner User",
+        )
+
+        checker(user=user)
+
+    def test_role_checker_allowed_email_forbidden(self):
+        checker = RoleChecker(
+            allowed_roles=[UserRoleEnum.ADMIN],
+            allowed_emails={"owner@example.com"},
+        )
+        user = UserModel(
+            id=1,
+            email="other@example.com",
+            roles=["admin"],
+            name="Admin but not owner",
         )
 
         with pytest.raises(HTTPException) as exc_info:

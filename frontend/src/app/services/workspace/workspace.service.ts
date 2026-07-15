@@ -33,6 +33,10 @@ export class WorkspaceService {
     return this.http.get<Workspace[]>(this.apiUrl);
   }
 
+  getSwitcherWorkspaces(): Observable<Workspace[]> {
+    return this.http.get<Workspace[]>(`${this.apiUrl}/switcher`);
+  }
+
   createWorkspace(name: string): Observable<Workspace> {
     return this.http.post<Workspace>(this.apiUrl, {name});
   }

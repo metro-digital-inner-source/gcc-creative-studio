@@ -157,6 +157,23 @@ async def get_current_user(
                     user_doc.id, {"picture": picture}
                 )
 
+        # Ensure admin users have access to the AI Enabler group
+        if UserRoleEnum.ADMIN in user_doc.roles:
+            try:
+                from src.groups.group_service import GroupService  # Local import to avoid circular dependency
+                
+                group_service = GroupService()
+                await group_service.ensure_admin_access_to_ai_enabler(user_doc)
+                logger.info("Admin user %s granted access to AI Enabler group", email)
+            except Exception as e:
+                logger.error(
+                    "Failed to ensure AI Enabler access for admin %s: %s",
+                    email,
+                    e,
+                )
+                # Don't fail auth if AI Enabler provisioning fails
+                pass
+
         return user_doc
 
     except auth.ExpiredIdTokenError as exc:
@@ -197,8 +214,17 @@ class RoleChecker:
     It depends on `get_current_user` to ensure the user is authenticated first.
     """
 
-    def __init__(self, allowed_roles: list[UserRoleEnum]):
+    def __init__(
+        self,
+        allowed_roles: list[UserRoleEnum],
+        allowed_emails: set[str] | None = None,
+    ):
         self.allowed_roles = allowed_roles
+        self.allowed_emails = {
+            email.strip().lower()
+            for email in (allowed_emails or set())
+            if email.strip()
+        }
 
     def __call__(self, user: UserModel = Depends(get_current_user)):
         """Checks the user's roles against the allowed roles."""
@@ -212,3 +238,14 @@ class RoleChecker:
                     "action."
                 ),
             )
+
+        if self.allowed_emails:
+            user_email = user.email.strip().lower()
+            if user_email not in self.allowed_emails:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "You do not have sufficient permissions to "
+                        "perform this action."
+                    ),
+                )

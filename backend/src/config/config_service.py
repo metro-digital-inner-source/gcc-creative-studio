@@ -54,6 +54,14 @@ class ConfigService(BaseSettings):
         default="", alias="IDENTITY_PLATFORM_ALLOWED_ORGS"
     )
     ALLOWED_EMAILS_STR: str = Field(default="", alias="ALLOWED_EMAILS")
+    ADMIN_OWNER_EMAILS_STR: str = Field(
+        default=(
+            "joejoseph.george@metro.digital,"
+            "manish.singh@metro-gsc.in,"
+            "abhishek.acharya@metro-gsc.in"
+        ),
+        alias="ADMIN_OWNER_EMAILS",
+    )
 
     # --- Storage ---
     # The defaults will be set in the validator below to prevent recursion.
@@ -152,6 +160,15 @@ class ConfigService(BaseSettings):
         return set(
             email.strip().lower()
             for email in self.ALLOWED_EMAILS_STR.split(",")
+            if email.strip()
+        )
+
+    @computed_field
+    @property
+    def ADMIN_OWNER_EMAILS(self) -> set[str]:
+        return set(
+            email.strip().lower()
+            for email in self.ADMIN_OWNER_EMAILS_STR.split(",")
             if email.strip()
         )
 

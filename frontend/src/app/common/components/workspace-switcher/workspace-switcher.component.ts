@@ -49,6 +49,7 @@ import {
 })
 export class WorkspaceSwitcherComponent implements OnInit {
   workspaces: Workspace[] = [];
+  selectableWorkspaces: Workspace[] = [];
   activeWorkspaceId: number | null = null;
   activeWorkspace: Workspace | null = null;
   currentUser: UserModel | null;
@@ -72,7 +73,7 @@ export class WorkspaceSwitcherComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.loadWorkspaces();
+    this.loadWorkspaceContext();
     this.workspaceStateService.activeWorkspaceId$.subscribe(id => {
       // Ensure we handle both string (from legacy/url) and number types safely if needed,
       // but ideally workspaceStateService should also be consistent.
@@ -108,17 +109,23 @@ export class WorkspaceSwitcherComponent implements OnInit {
     });
   }
 
-  loadWorkspaces(): void {
-    this.workspaceService.getWorkspaces().subscribe({
+  loadWorkspaceContext(): void {
+    this.workspaceService.getSwitcherWorkspaces().subscribe({
       next: workspaces => {
-        this.workspaces = workspaces;
-        // Now that we have the workspaces, we can determine the initial active one.
-        this.initializeActiveWorkspace();
+        this.setWorkspaceCollections(workspaces);
       },
       error: error => {
         handleErrorSnackbar(this.snackBar, error, 'Could not load workspaces');
       },
     });
+  }
+
+  private setWorkspaceCollections(workspaces: Workspace[]): void {
+    this.workspaces = workspaces;
+    this.selectableWorkspaces = workspaces.filter(
+      workspace => workspace.scope === WorkspaceScope.PRIVATE,
+    );
+    this.initializeActiveWorkspace();
   }
 
   initializeActiveWorkspace(): void {
@@ -139,21 +146,20 @@ export class WorkspaceSwitcherComponent implements OnInit {
     if (
       preferredWorkspaceId &&
       !isNaN(preferredWorkspaceId) &&
-      this.workspaces.some(w => w.id === preferredWorkspaceId)
+      this.selectableWorkspaces.some(w => w.id === preferredWorkspaceId)
     ) {
       this.setActiveWorkspace(preferredWorkspaceId);
       return;
     }
 
-    const googleWorkspace = this.workspaces.find(
-      w => w.scope === WorkspaceScope.PUBLIC,
-    );
-    if (googleWorkspace) {
-      // Fallback to public workspace
-      this.setActiveWorkspace(googleWorkspace.id);
-    } else if (this.workspaces.length > 0) {
-      // Fallback to the first workspace
-      this.setActiveWorkspace(this.workspaces[0].id);
+    if (this.selectableWorkspaces.length > 0) {
+      this.setActiveWorkspace(this.selectableWorkspaces[0].id);
+    } else {
+      this.activeWorkspace = null;
+      this.workspaceStateService.setActiveWorkspaceId(null);
+      if (this.isBrowser) {
+        localStorage.removeItem('activeWorkspaceId');
+      }
     }
   }
 

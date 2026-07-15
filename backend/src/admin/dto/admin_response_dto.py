@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from enum import Enum
+
 from src.common.base_dto import BaseDto
+from src.groups.schema.group_model import GroupModel
 
 
 class AdminOverviewStats(BaseDto):
@@ -56,3 +59,17 @@ class AdminGenerationHealth(BaseDto):
 class AdminMonthlyActiveUsers(BaseDto):
     month: str
     count: int
+
+
+class UserProvisioningStatus(str, Enum):
+    CREATED = "created"
+    EXISTING = "existing"
+    RESTORED = "restored"
+
+
+class AddUserByEmailResponse(BaseDto):
+    provisioning_status: UserProvisioningStatus
+    created_new_user: bool
+    user_id: int
+    email: str
+    group: GroupModel

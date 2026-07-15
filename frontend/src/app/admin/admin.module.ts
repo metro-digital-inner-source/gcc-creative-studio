@@ -54,6 +54,8 @@ import {GroupsManagementComponent} from './groups-management/groups-management.c
 import {CreateGroupDialogComponent} from './groups-management/create-group-dialog/create-group-dialog.component';
 import {AddMemberDialogComponent} from './groups-management/add-member-dialog/add-member-dialog.component';
 import {AdminDeprecatedModule} from './admin-deprecated.module';
+import {AdminGroupAnalyticsComponent} from './admin-group-analytics/admin-group-analytics.component';
+import {AddUserDialogComponent} from './users-management/add-user-dialog.component';
 
 @NgModule({
   declarations: [
@@ -64,6 +66,8 @@ import {AdminDeprecatedModule} from './admin-deprecated.module';
     GroupsManagementComponent,
     CreateGroupDialogComponent,
     AddMemberDialogComponent,
+    AdminGroupAnalyticsComponent,
+    AddUserDialogComponent,
   ],
   imports: [
     CommonModule,

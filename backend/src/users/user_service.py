@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+from typing import Literal
+
 from fastapi import Depends
 from sqlalchemy import func, select
 
@@ -104,6 +106,43 @@ class UserService:
 
         # 3. Call the repository's create() method
         return await self.user_repo.create(user_data)
+
+    async def create_or_restore_user_by_email_for_admin(
+        self,
+        email: str,
+    ) -> tuple[UserModel, Literal["created", "existing", "restored"]]:
+        """Creates (or restores) a user profile by email for admin actions.
+
+        Returns a tuple of (user, provisioning_status).
+        """
+        normalized_email = email.strip().lower()
+
+        existing_user = await self.user_repo.get_by_email(
+            normalized_email,
+            include_deleted=True,
+        )
+        if existing_user:
+            if existing_user.deleted_at is not None:
+                await self.user_repo.restore(existing_user.id)
+                existing_user = await self.user_repo.get_by_id(existing_user.id)
+                return existing_user, "restored"
+            return existing_user, "existing"
+
+        # Derive a deterministic display name from email local part.
+        local_part = normalized_email.split("@", maxsplit=1)[0].replace(
+            ".", " "
+        )
+        local_part = local_part.replace("_", " ").replace("-", " ")
+        derived_name = " ".join(segment for segment in local_part.split() if segment)
+        if len(derived_name) < 2:
+            derived_name = "User"
+
+        created = await self.create_user_if_not_exists(
+            email=normalized_email,
+            name=derived_name.title(),
+            picture=None,
+        )
+        return created, "created"
 
     async def get_user_by_id(self, user_id: int) -> UserModel | None:
         """Finds a single user by their ID."""

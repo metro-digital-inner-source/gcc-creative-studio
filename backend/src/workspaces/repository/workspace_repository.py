@@ -136,6 +136,37 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
         workspaces = result.scalars().all()
         return [self._map_to_schema(w) for w in workspaces]
 
+    async def find_private_by_member_id(
+        self, user_id: int
+    ) -> list[WorkspaceModel]:
+        """Finds private workspaces where the user is a member."""
+        result = await self.db.execute(
+            select(self.model)
+            .join(WorkspaceMemberAssociation)
+            .where(
+                WorkspaceMemberAssociation.user_id == user_id,
+                self.model.scope == WorkspaceScopeEnum.PRIVATE.value,
+            ),
+        )
+        workspaces = result.scalars().all()
+        return [self._map_to_schema(w) for w in workspaces]
+
+    async def find_all_private(
+        self,
+        limit: int,
+        offset: int,
+    ) -> list[WorkspaceModel]:
+        """Finds all private workspaces."""
+        result = await self.db.execute(
+            select(self.model)
+            .where(self.model.scope == WorkspaceScopeEnum.PRIVATE.value)
+            .order_by(self.model.id)
+            .limit(limit)
+            .offset(offset),
+        )
+        workspaces = result.scalars().all()
+        return [self._map_to_schema(w) for w in workspaces]
+
     async def is_member(self, workspace_id: int, user_id: int) -> bool:
         """Checks if a user is a member of a workspace."""
         result = await self.db.execute(

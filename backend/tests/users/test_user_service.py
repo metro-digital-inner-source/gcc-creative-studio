@@ -125,6 +125,71 @@ class TestGetUserById:
         mock_user_repo.get_by_id.assert_called_once_with(999)
 
 
+class TestCreateOrRestoreUserByEmailForAdmin:
+    """Tests for UserService.create_or_restore_user_by_email_for_admin."""
+
+    @pytest.mark.anyio
+    async def test_returns_existing_user_status_existing(
+        self,
+        user_service,
+        mock_user_repo,
+        mock_user,
+    ):
+        mock_user_repo.get_by_email.return_value = mock_user
+
+        user, status = await user_service.create_or_restore_user_by_email_for_admin(
+            " User@Example.com "
+        )
+
+        assert user == mock_user
+        assert status == "existing"
+        mock_user_repo.get_by_email.assert_called_once_with(
+            "user@example.com",
+            include_deleted=True,
+        )
+
+    @pytest.mark.anyio
+    async def test_restores_soft_deleted_user(
+        self,
+        user_service,
+        mock_user_repo,
+        mock_user,
+    ):
+        import datetime
+
+        deleted_user = mock_user.model_copy(
+            update={"deleted_at": datetime.datetime.now(datetime.UTC)}
+        )
+        mock_user_repo.get_by_email.return_value = deleted_user
+        mock_user_repo.get_by_id.return_value = mock_user
+
+        user, status = await user_service.create_or_restore_user_by_email_for_admin(
+            "user@example.com"
+        )
+
+        assert user == mock_user
+        assert status == "restored"
+        mock_user_repo.restore.assert_called_once_with(mock_user.id)
+
+    @pytest.mark.anyio
+    async def test_creates_new_user_when_missing(
+        self,
+        user_service,
+        mock_user_repo,
+        mock_user,
+    ):
+        mock_user_repo.get_by_email.return_value = None
+        user_service.create_user_if_not_exists = AsyncMock(return_value=mock_user)
+
+        user, status = await user_service.create_or_restore_user_by_email_for_admin(
+            "new.user@example.com"
+        )
+
+        assert user == mock_user
+        assert status == "created"
+        user_service.create_user_if_not_exists.assert_called_once()
+
+
 class TestUpdateUserRole:
     """Tests for UserService.update_user_role."""
 

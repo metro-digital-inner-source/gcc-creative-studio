@@ -37,10 +37,12 @@ class WorkspaceService:
         self,
         workspace_repo: WorkspaceRepository = Depends(),
         user_repo: UserRepository = Depends(),
+        group_repo: GroupRepository = Depends(),
         email_service: EmailService = Depends(),
     ):
         self.workspace_repo = workspace_repo
         self.user_repo = user_repo
+        self.group_repo = group_repo
         self.email_service = email_service
 
     async def create_workspace(
@@ -118,15 +120,14 @@ class WorkspaceService:
             )
 
         # 3.5. Add the user to the specified group
-        group_repo = GroupRepository(self.workspace_repo.db)
-        group = await group_repo.get_by_id_with_members(invite_dto.group_id)
+        group = await self.group_repo.get_by_id_with_members(invite_dto.group_id)
         if not group:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Group not found.",
             )
 
-        await group_repo.add_member(
+        await self.group_repo.add_member(
             invite_dto.group_id,
             invited_user.id,
             invite_dto.group_role,
@@ -180,3 +181,32 @@ class WorkspaceService:
             all_workspaces_map[w.id] = w
 
         return list(all_workspaces_map.values())
+
+    async def list_switcher_workspaces_for_user(
+        self, user: UserModel
+    ) -> list[WorkspaceModel]:
+        """Returns workspaces for the switcher UI contract.
+
+        The switcher should only show private workspaces accessible by the
+        current user and should exclude group-shared workspaces.
+        """
+        is_system_admin = UserRoleEnum.ADMIN in user.roles
+
+        if is_system_admin:
+            private_workspaces = await self.workspace_repo.find_all_private(
+                limit=1000,
+                offset=0,
+            )
+        else:
+            private_workspaces = (
+                await self.workspace_repo.find_private_by_member_id(user.id)
+            )
+
+        shared_workspace_ids = (
+            await self.group_repo.get_all_shared_workspace_ids()
+        )
+        return [
+            workspace
+            for workspace in private_workspaces
+            if workspace.id not in shared_workspace_ids
+        ]

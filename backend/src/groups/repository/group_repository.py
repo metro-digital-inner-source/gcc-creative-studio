@@ -27,7 +27,13 @@ from src.groups.schema.group_model import (
     GroupModel,
     GroupUsageDaily,
 )
+from src.workspaces.schema.workspace_model import Workspace, WorkspaceMember
 from src.users.user_model import User
+from src.workspaces.schema.workspace_model import (
+    WorkspaceMember,
+    WorkspaceRoleEnum,
+    WorkspaceScopeEnum,
+)
 
 
 class GroupRepository(BaseRepository[Group, GroupModel]):
@@ -124,6 +130,38 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
         )
         return result.scalar_one_or_none() is not None
 
+    async def upsert_group_member(
+        self,
+        group_id: int,
+        user_id: int,
+        role: GroupMemberRoleEnum = GroupMemberRoleEnum.MEMBER,
+    ) -> bool:
+        """Adds or updates a member's role in a group. Returns True if added/updated."""
+        result = await self.db.execute(
+            select(GroupMember).where(
+                GroupMember.group_id == group_id,
+                GroupMember.user_id == user_id,
+            )
+        )
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            # Update role if changed
+            if existing.role != role.value:
+                existing.role = role.value
+                await self.db.commit()
+            return False  # Already existed
+
+        # Add new member
+        db_member = GroupMember(
+            group_id=group_id,
+            user_id=user_id,
+            role=role.value,
+        )
+        self.db.add(db_member)
+        await self.db.commit()
+        return True  # Newly added
+
     async def get_all_groups(self) -> list[GroupModel]:
         """Gets all groups (admin use)."""
         result = await self.db.execute(
@@ -131,6 +169,19 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
         )
         groups = result.scalars().all()
         return [self._map_to_schema(g) for g in groups]
+
+    async def find_ai_enabler_group(self) -> GroupModel | None:
+        """Finds the 'AI Enabler' group by name."""
+        result = await self.db.execute(
+            select(self.model).where(self.model.name == "AI Enabler")
+        )
+        group = result.scalar_one_or_none()
+        return self._map_to_schema(group) if group else None
+
+    async def get_all_shared_workspace_ids(self) -> set[int]:
+        """Gets all shared workspace IDs referenced by groups."""
+        result = await self.db.execute(select(self.model.shared_workspace_id))
+        return {row[0] for row in result.all()}
 
     async def delete_group(self, group_id: int) -> bool:
         """Deletes a group and all its members. Returns True if deleted, False if not found."""
@@ -192,12 +243,8 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
         end_date: date | None = None,
     ) -> dict:
         """Gets aggregate usage summary across all groups."""
-        query = (
+        usage_query = (
             select(
-                func.count(func.distinct(Group.id)).label("total_groups"),
-                func.count(func.distinct(GroupMember.user_id)).label(
-                    "total_members"
-                ),
                 func.coalesce(func.sum(GroupUsageDaily.spend_usd), 0).label(
                     "total_spend_usd"
                 ),
@@ -205,15 +252,24 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
                     func.sum(GroupUsageDaily.tokens_consumed), 0
                 ).label("total_tokens_consumed"),
             )
-            .select_from(Group)
-            .outerjoin(GroupMember)
-            .outerjoin(GroupUsageDaily)
+            .select_from(GroupUsageDaily)
         )
 
         if start_date:
-            query = query.where(GroupUsageDaily.date >= start_date)
+            usage_query = usage_query.where(GroupUsageDaily.date >= start_date)
         if end_date:
-            query = query.where(GroupUsageDaily.date <= end_date)
+            usage_query = usage_query.where(GroupUsageDaily.date <= end_date)
+
+        usage_subquery = usage_query.subquery()
+
+        query = select(
+            select(func.count(Group.id)).scalar_subquery().label("total_groups"),
+            select(func.count(func.distinct(GroupMember.user_id)))
+            .scalar_subquery()
+            .label("total_members"),
+            usage_subquery.c.total_spend_usd,
+            usage_subquery.c.total_tokens_consumed,
+        )
 
         result = await self.db.execute(query)
         row = result.one()
@@ -231,35 +287,67 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
         end_date: date | None = None,
     ) -> list[dict]:
         """Gets per-group usage breakdown."""
+        member_count_subquery = (
+            select(
+                GroupMember.group_id.label("group_id"),
+                func.count(func.distinct(GroupMember.user_id)).label(
+                    "member_count"
+                ),
+            )
+            .group_by(GroupMember.group_id)
+            .subquery()
+        )
+
+        usage_query = select(
+            GroupUsageDaily.group_id.label("group_id"),
+            func.coalesce(func.sum(GroupUsageDaily.spend_usd), 0).label(
+                "spend_usd"
+            ),
+            func.coalesce(func.sum(GroupUsageDaily.tokens_consumed), 0).label(
+                "tokens_consumed"
+            ),
+            func.coalesce(func.sum(GroupUsageDaily.activity_count), 0).label(
+                "activity_count"
+            ),
+        )
+
+        if start_date:
+            usage_query = usage_query.where(GroupUsageDaily.date >= start_date)
+        if end_date:
+            usage_query = usage_query.where(GroupUsageDaily.date <= end_date)
+
+        usage_subquery = usage_query.group_by(GroupUsageDaily.group_id).subquery()
+
         query = (
             select(
                 Group.id.label("group_id"),
                 Group.name.label("group_name"),
                 Group.country_code.label("country_code"),
-                func.count(func.distinct(GroupMember.user_id)).label(
-                    "member_count"
-                ),
-                func.coalesce(func.sum(GroupUsageDaily.spend_usd), 0).label(
-                    "spend_usd"
-                ),
                 func.coalesce(
-                    func.sum(GroupUsageDaily.tokens_consumed), 0
+                    member_count_subquery.c.member_count,
+                    0,
+                ).label("member_count"),
+                func.coalesce(
+                    usage_subquery.c.spend_usd,
+                    0,
+                ).label("spend_usd"),
+                func.coalesce(
+                    usage_subquery.c.tokens_consumed,
+                    0,
                 ).label("tokens_consumed"),
                 func.coalesce(
-                    func.sum(GroupUsageDaily.activity_count), 0
+                    usage_subquery.c.activity_count,
+                    0,
                 ).label("activity_count"),
             )
             .select_from(Group)
-            .outerjoin(GroupMember)
-            .outerjoin(GroupUsageDaily)
-            .group_by(Group.id, Group.name, Group.country_code)
+            .outerjoin(
+                member_count_subquery,
+                Group.id == member_count_subquery.c.group_id,
+            )
+            .outerjoin(usage_subquery, Group.id == usage_subquery.c.group_id)
             .order_by(Group.name)
         )
-
-        if start_date:
-            query = query.where(GroupUsageDaily.date >= start_date)
-        if end_date:
-            query = query.where(GroupUsageDaily.date <= end_date)
 
         result = await self.db.execute(query)
         rows = result.all()

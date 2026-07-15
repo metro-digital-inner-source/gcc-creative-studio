@@ -100,6 +100,82 @@ class GroupService:
         # 4. Return the group with members loaded
         return await self.group_repo.get_by_id_with_members(group.id)
 
+    async def ensure_admin_access_to_ai_enabler(
+        self,
+        admin_user: UserModel,
+    ) -> GroupModel | None:
+        """Ensures an admin user has access to the AI Enabler group.
+
+        This is called during admin user provisioning to automatically grant
+        access to the AI Enabler group with admin role.
+
+        Returns the AI Enabler group, or None if the user is not an admin.
+        """
+        # Check if user is an admin
+        if UserRoleEnum.ADMIN not in admin_user.roles:
+            return None
+
+        # Find or create the AI Enabler group
+        ai_enabler = await self.group_repo.find_ai_enabler_group()
+
+        if not ai_enabler:
+            # Create the AI Enabler group if it doesn't exist
+            # Use admin user as the creator/owner
+            workspace_dto = CreateWorkspaceDto(
+                name="AI Enabler Workspace",
+                scope=WorkspaceScopeEnum.PRIVATE,
+            )
+            workspace = await self.workspace_service.create_workspace(
+                user=admin_user,
+                create_dto=workspace_dto,
+            )
+
+            ai_enabler = await self.group_repo.create_group(
+                name="AI Enabler",
+                shared_workspace_id=workspace.id,
+                country_code=None,
+            )
+
+            # Add the admin as the first member with admin role
+            await self.group_repo.add_member(
+                group_id=ai_enabler.id,
+                user_id=admin_user.id,
+                role=GroupMemberRoleEnum.ADMIN,
+            )
+
+            # Add workspace membership
+            workspace_member = WorkspaceMember(
+                user_id=admin_user.id,
+                email="",  # Email will be fetched by workspace service
+                role=WorkspaceRoleEnum.EDITOR,
+            )
+            await self.workspace_service.workspace_repo.add_member_to_workspace(
+                workspace_id=workspace.id,
+                member=workspace_member,
+                user_id=admin_user.id,
+            )
+        else:
+            # AI Enabler exists; ensure admin is a member with admin role
+            await self.group_repo.upsert_group_member(
+                group_id=ai_enabler.id,
+                user_id=admin_user.id,
+                role=GroupMemberRoleEnum.ADMIN,
+            )
+
+            # Ensure user has workspace access (add_member_to_workspace handles duplicates)
+            workspace_member = WorkspaceMember(
+                user_id=admin_user.id,
+                email="",  # Email will be fetched by workspace service
+                role=WorkspaceRoleEnum.EDITOR,
+            )
+            await self.workspace_service.workspace_repo.add_member_to_workspace(
+                workspace_id=ai_enabler.shared_workspace_id,
+                member=workspace_member,
+                user_id=admin_user.id,
+            )
+
+        return await self.group_repo.get_by_id_with_members(ai_enabler.id)
+
     async def add_member_to_group(
         self,
         group_id: int,

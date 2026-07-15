@@ -14,7 +14,7 @@
 """Tests for Workspace Service."""
 
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -38,6 +38,11 @@ def fixture_mock_user_repo():
     return AsyncMock()
 
 
+@pytest.fixture(name="mock_group_repo")
+def fixture_mock_group_repo():
+    return AsyncMock()
+
+
 @pytest.fixture(name="mock_email_service")
 def fixture_mock_email_service():
     return MagicMock()  # Synchronous service usually
@@ -45,11 +50,15 @@ def fixture_mock_email_service():
 
 @pytest.fixture(name="workspace_service")
 def fixture_workspace_service(
-    mock_workspace_repo, mock_user_repo, mock_email_service
+    mock_workspace_repo,
+    mock_user_repo,
+    mock_group_repo,
+    mock_email_service,
 ):
     return WorkspaceService(
         workspace_repo=mock_workspace_repo,
         user_repo=mock_user_repo,
+        group_repo=mock_group_repo,
         email_service=mock_email_service,
     )
 
@@ -173,6 +182,7 @@ class TestInviteUserToWorkspace:
         workspace_service,
         mock_workspace_repo,
         mock_user_repo,
+        mock_group_repo,
         mock_email_service,
         mock_user,
     ):
@@ -204,18 +214,13 @@ class TestInviteUserToWorkspace:
         )
 
         mock_group = MagicMock(shared_workspace_id=2)
-        mock_group_repo = AsyncMock()
         mock_group_repo.get_by_id_with_members.return_value = mock_group
 
-        with patch(
-            "src.workspaces.workspace_service.GroupRepository",
-            return_value=mock_group_repo,
-        ):
-            result = await workspace_service.invite_user_to_workspace(
-                1,
-                invite_dto,
-                mock_user,
-            )
+        result = await workspace_service.invite_user_to_workspace(
+            1,
+            invite_dto,
+            mock_user,
+        )
 
         assert result == updated_workspace
         assert mock_workspace_repo.add_member_to_workspace.call_count == 2
@@ -250,3 +255,61 @@ class TestListWorkspacesForUser:
         ids = [w.id for w in result]
         assert 1 in ids
         assert 2 in ids
+
+
+class TestListSwitcherWorkspacesForUser:
+    """Tests for WorkspaceService.list_switcher_workspaces_for_user."""
+
+    @pytest.mark.anyio
+    async def test_list_switcher_workspaces_for_regular_user(
+        self,
+        workspace_service,
+        mock_workspace_repo,
+        mock_group_repo,
+        mock_user,
+    ):
+        w1 = WorkspaceModel(id=1, name="Private A", owner_id=mock_user.id)
+        w2 = WorkspaceModel(id=2, name="Private B", owner_id=mock_user.id)
+        mock_workspace_repo.find_private_by_member_id.return_value = [w1, w2]
+        mock_group_repo.get_all_shared_workspace_ids.return_value = {2}
+
+        result = await workspace_service.list_switcher_workspaces_for_user(
+            mock_user
+        )
+
+        assert len(result) == 1
+        assert result[0].id == 1
+        mock_workspace_repo.find_private_by_member_id.assert_called_once_with(
+            mock_user.id
+        )
+
+    @pytest.mark.anyio
+    async def test_list_switcher_workspaces_for_admin(
+        self,
+        workspace_service,
+        mock_workspace_repo,
+        mock_group_repo,
+    ):
+        from src.users.user_model import UserModel
+
+        admin_user = UserModel(
+            id=99,
+            email="admin@example.com",
+            roles=["admin"],
+            name="Admin",
+        )
+        w1 = WorkspaceModel(id=10, name="Private Admin", owner_id=99)
+        w2 = WorkspaceModel(id=11, name="Group Shared", owner_id=3)
+        mock_workspace_repo.find_all_private.return_value = [w1, w2]
+        mock_group_repo.get_all_shared_workspace_ids.return_value = {11}
+
+        result = await workspace_service.list_switcher_workspaces_for_user(
+            admin_user
+        )
+
+        assert len(result) == 1
+        assert result[0].id == 10
+        mock_workspace_repo.find_all_private.assert_called_once_with(
+            limit=1000,
+            offset=0,
+        )

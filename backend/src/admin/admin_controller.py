@@ -14,8 +14,10 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from src.auth.auth_guard import RoleChecker, get_current_user
+from src.config.config_service import config_service
 from src.users.user_model import UserRoleEnum, UserModel
 from src.admin.admin_service import AdminService
+from src.admin.dto.admin_request_dto import AddUserByEmailRequest
 from src.admin.dto.admin_response_dto import (
     AdminOverviewStats,
     AdminMediaOverTime,
@@ -23,12 +25,20 @@ from src.admin.dto.admin_response_dto import (
     AdminActiveRole,
     AdminGenerationHealth,
     AdminMonthlyActiveUsers,
+    AddUserByEmailResponse,
 )
 
 router = APIRouter(
     prefix="/api/admin",
     tags=["Admin Dashboard"],
-    dependencies=[Depends(RoleChecker(allowed_roles=[UserRoleEnum.ADMIN]))],
+    dependencies=[
+        Depends(
+            RoleChecker(
+                allowed_roles=[UserRoleEnum.ADMIN],
+                allowed_emails=config_service.ADMIN_OWNER_EMAILS,
+            )
+        )
+    ],
 )
 
 
@@ -169,6 +179,25 @@ async def add_user_to_group(
     """Adds a user to a group (admin action)."""
     return await admin_service.add_user_to_group(
         group_id, user_id, role, current_user
+    )
+
+
+@router.post(
+    "/groups/{group_id}/users/by-email",
+    response_model=AddUserByEmailResponse,
+)
+async def add_user_to_group_by_email(
+    group_id: int,
+    request: AddUserByEmailRequest,
+    admin_service: AdminService = Depends(),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Creates/gets a user by email and assigns them to a group immediately."""
+    return await admin_service.add_user_to_group_by_email(
+        group_id=group_id,
+        email=request.email,
+        role=request.role,
+        admin_user=current_user,
     )
 
 
