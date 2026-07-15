@@ -178,6 +178,54 @@ class AdminService:
         """Deletes a group (admin action). Returns True if deleted, False if not found."""
         return await self.group_service.group_repo.delete_group(group_id)
 
+    async def reset_dev_database(self) -> dict:
+        """DEV ONLY: Truncates all application data tables for fresh start."""
+        from sqlalchemy import text
+
+        tables_to_truncate = [
+            "workspace_members",
+            "workspace_usage_daily",
+            "workspaces",
+            "group_members",
+            "group_usage_daily",
+            "groups",
+            "media_items",
+            "media_templates",
+            "images",
+            "videos",
+            "audios",
+            "projects",
+            "workflows",
+            "workflows_executor",
+            "galleries",
+            "tags",
+            "brand_guidelines",
+            "source_assets",
+            "users",
+        ]
+
+        truncated_count = 0
+        errors = []
+
+        for table in tables_to_truncate:
+            try:
+                await self.admin_repo.db.execute(
+                    text(f"TRUNCATE TABLE {table} CASCADE")
+                )
+                truncated_count += 1
+            except Exception as e:
+                errors.append(f"{table}: {str(e)}")
+
+        await self.admin_repo.db.commit()
+
+        return {
+            "status": "success" if truncated_count == len(tables_to_truncate) else "partial",
+            "tables_truncated": truncated_count,
+            "total_tables": len(tables_to_truncate),
+            "errors": errors,
+            "message": "Dev database reset complete. Ready for fresh AI Enabler test.",
+        }
+
     async def get_group_usage_summary(
         self, start_date: str | None = None, end_date: str | None = None
     ):
