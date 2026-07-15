@@ -86,6 +86,28 @@ class TestListMyWorkspaces:
         assert len(data) == 1
         assert data[0]["name"] == "Work 1"
 
+    def test_list_workspace_switcher_workspaces_success(
+        self,
+        api_client,
+        mock_workspace_service,
+        mock_user,
+    ):
+        workspace = WorkspaceModel(
+            id=2,
+            name="Private Switcher",
+            owner_id=mock_user.id,
+        )
+        mock_workspace_service.list_switcher_workspaces_for_user.return_value = [
+            workspace
+        ]
+
+        response = api_client.get("/api/workspaces/switcher")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["name"] == "Private Switcher"
+
 
 class TestInviteUser:
     """Tests for POST /api/workspaces/{id}/invites."""

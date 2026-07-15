@@ -197,8 +197,17 @@ class RoleChecker:
     It depends on `get_current_user` to ensure the user is authenticated first.
     """
 
-    def __init__(self, allowed_roles: list[UserRoleEnum]):
+    def __init__(
+        self,
+        allowed_roles: list[UserRoleEnum],
+        allowed_emails: set[str] | None = None,
+    ):
         self.allowed_roles = allowed_roles
+        self.allowed_emails = {
+            email.strip().lower()
+            for email in (allowed_emails or set())
+            if email.strip()
+        }
 
     def __call__(self, user: UserModel = Depends(get_current_user)):
         """Checks the user's roles against the allowed roles."""
@@ -212,3 +221,14 @@ class RoleChecker:
                     "action."
                 ),
             )
+
+        if self.allowed_emails:
+            user_email = user.email.strip().lower()
+            if user_email not in self.allowed_emails:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "You do not have sufficient permissions to "
+                        "perform this action."
+                    ),
+                )

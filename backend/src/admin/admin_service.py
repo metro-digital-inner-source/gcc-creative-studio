@@ -23,10 +23,13 @@ from src.admin.dto.admin_response_dto import (
     AdminActiveRole,
     AdminGenerationHealth,
     AdminMonthlyActiveUsers,
+    AddUserByEmailResponse,
+    UserProvisioningStatus,
 )
 from src.groups.group_service import GroupService
 from src.groups.schema.group_model import GroupMemberRoleEnum
 from src.users.user_model import UserModel
+from src.users.user_service import UserService
 
 
 class AdminService:
@@ -34,9 +37,11 @@ class AdminService:
         self,
         admin_repo: AdminRepository = Depends(),
         group_service: GroupService = Depends(),
+        user_service: UserService = Depends(),
     ):
         self.admin_repo = admin_repo
         self.group_service = group_service
+        self.user_service = user_service
 
     async def get_overview_stats(
         self, start_date: str | None = None, end_date: str | None = None
@@ -133,6 +138,40 @@ class AdminService:
             user_id,
             member_role,
             admin_user,
+        )
+
+    async def add_user_to_group_by_email(
+        self,
+        group_id: int,
+        email: str,
+        role: str,
+        admin_user: UserModel,
+    ) -> AddUserByEmailResponse:
+        """Creates/gets a user by email and assigns them to a group."""
+        try:
+            member_role = GroupMemberRoleEnum(role)
+        except ValueError:
+            member_role = GroupMemberRoleEnum.MEMBER
+
+        user, provisioning_status = (
+            await self.user_service.create_or_restore_user_by_email_for_admin(
+                email
+            )
+        )
+
+        group = await self.group_service.add_member_to_group(
+            group_id,
+            user.id,
+            member_role,
+            admin_user,
+        )
+
+        return AddUserByEmailResponse(
+            provisioning_status=UserProvisioningStatus(provisioning_status),
+            created_new_user=provisioning_status == "created",
+            user_id=user.id,
+            email=user.email,
+            group=group,
         )
 
     async def delete_group_admin(self, group_id: int) -> bool:

@@ -30,13 +30,17 @@ class UserRepository(BaseRepository[User, UserModel]):
     def __init__(self, db: AsyncSession = Depends(get_db)):
         super().__init__(model=User, schema=UserModel, db=db)
 
-    async def get_by_email(self, email: str) -> UserModel | None:
+    async def get_by_email(
+        self,
+        email: str,
+        include_deleted: bool = False,
+    ) -> UserModel | None:
         """Finds a single user by their email address."""
         normalized_email = email.strip().lower()
         result = await self.db.execute(
-            select(self.model).where(
-                func.lower(self.model.email) == normalized_email
-            ),
+            select(self.model)
+            .where(func.lower(self.model.email) == normalized_email)
+            .execution_options(include_deleted=include_deleted),
         )
         user = result.scalar_one_or_none()
         if not user:

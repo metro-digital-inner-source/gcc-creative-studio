@@ -37,6 +37,10 @@ import {GroupService} from '../../services/group/group.service';
 import {CreateGroupDialogComponent} from '../groups-management/create-group-dialog/create-group-dialog.component';
 import {AddMemberDialogComponent} from '../groups-management/add-member-dialog/add-member-dialog.component';
 import {
+  AddUserDialogComponent,
+  AddUserDialogResult,
+} from './add-user-dialog.component';
+import {
   handleErrorSnackbar,
   handleSuccessSnackbar,
 } from '../../utils/handleMessageSnackbar';
@@ -85,6 +89,7 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
   private filterSubject = new Subject<string>();
   private destroy$ = new Subject<void>();
   currentFilter = '';
+  selectedGroupId: number | null = null;
 
   @ViewChild(MatSort) sort!: MatSort;
 
@@ -191,15 +196,45 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
   }
 
   applyFilterToTree(): void {
+    const visibleGroups = this.selectedGroupId
+      ? this.groups.filter(group => group.id === this.selectedGroupId)
+      : this.groups;
+
     if (!this.currentFilter) {
-      this.buildTreeData();
+      const treeNodes: TreeNode[] = [];
+      for (const group of visibleGroups) {
+        const groupNode: TreeNode = {
+          type: 'group',
+          level: 0,
+          expandable: true,
+          isExpanded: this.expandedGroupIds.has(group.id),
+          groupId: group.id,
+          groupName: group.name,
+          countryCode: group.countryCode,
+          memberCount: group.members?.length || 0,
+        };
+        treeNodes.push(groupNode);
+
+        if (this.expandedGroupIds.has(group.id) && group.members) {
+          for (const member of group.members) {
+            treeNodes.push({
+              type: 'member',
+              level: 1,
+              expandable: false,
+              member,
+              parentGroupId: group.id,
+            });
+          }
+        }
+      }
+      this.dataSource.data = treeNodes;
       return;
     }
-    
+
     const filter = this.currentFilter.toLowerCase();
     const treeNodes: TreeNode[] = [];
-    
-    for (const group of this.groups) {
+
+    for (const group of visibleGroups) {
       const matchingMembers = group.members?.filter(member => 
         member.email.toLowerCase().includes(filter) ||
         member.name.toLowerCase().includes(filter)
@@ -234,6 +269,11 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
     }
     
     this.dataSource.data = treeNodes;
+  }
+
+  applyGroupFilter(groupId: string): void {
+    this.selectedGroupId = groupId ? Number(groupId) : null;
+    this.applyFilterToTree();
   }
 
   openUserForm(member: GroupMember): void {
@@ -377,14 +417,26 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
   }
 
   openAddUserDialog(): void {
-    const dialogRef = this.dialog.open(AddMemberDialogComponent, {
+    const dialogRef = this.dialog.open(AddUserDialogComponent, {
       width: '500px',
+      data: {groups: this.groups},
     });
 
-    dialogRef.afterClosed().subscribe((result: any) => {
+    dialogRef.afterClosed().subscribe((result: AddUserDialogResult | undefined) => {
       if (result) {
-        handleSuccessSnackbar(this._snackBar, 'User added to group successfully!');
-        this.loadGroups();
+        this.isLoading = true;
+        this.groupService
+          .addUserToGroupByEmail(result.groupId, result.email, result.role)
+          .subscribe({
+            next: () => {
+              handleSuccessSnackbar(this._snackBar, 'User added to group successfully!');
+              this.loadGroups();
+            },
+            error: err => {
+              this.isLoading = false;
+              handleErrorSnackbar(this._snackBar, err, 'Add user to group');
+            },
+          });
       }
     });
   }

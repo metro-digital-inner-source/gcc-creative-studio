@@ -16,19 +16,15 @@
 
 import {NgModule} from '@angular/core';
 import {RouterModule, Routes} from '@angular/router';
-import {AdminLayoutComponent} from './admin-layout/admin-layout.component';
-import {UsersManagementComponent} from './users-management/users-management.component';
-import {AdminGroupAnalyticsComponent} from './admin-group-analytics/admin-group-analytics.component';
+import {AnalyticsLayoutComponent} from './analytics-layout/analytics-layout.component';
+import {AnalyticsHomeComponent} from './analytics-home/analytics-home.component';
 
 const routes: Routes = [
   {
-    path: '', // This will be '/admin' because of the main app routing
-    component: AdminLayoutComponent,
+    path: '',
+    component: AnalyticsLayoutComponent,
     children: [
-      {path: '', redirectTo: 'users', pathMatch: 'full'},
-      {path: 'users', component: UsersManagementComponent},
-      {path: 'analytics', component: AdminGroupAnalyticsComponent},
-      {path: 'dashboard', redirectTo: '/analytics', pathMatch: 'full'},
+      {path: '', component: AnalyticsHomeComponent, pathMatch: 'full'},
     ],
   },
 ];
@@ -37,4 +33,4 @@ const routes: Routes = [
   imports: [RouterModule.forChild(routes)],
   exports: [RouterModule],
 })
-export class AdminRoutingModule {}
+export class AnalyticsRoutingModule {}

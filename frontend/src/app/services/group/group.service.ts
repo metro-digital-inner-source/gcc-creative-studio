@@ -28,6 +28,14 @@ import {
   AddMemberRequest,
 } from '../../common/models/group.model';
 
+export interface AddUserByEmailResponse {
+  provisioningStatus: 'created' | 'existing' | 'restored';
+  createdNewUser: boolean;
+  userId: number;
+  email: string;
+  group: Group;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -115,6 +123,23 @@ export class GroupService {
       `${this.adminApiUrl}/${groupId}/users`,
       null,
       {params},
+    );
+  }
+
+  /**
+   * Add or provision a user by email and assign to a group (admin only)
+   */
+  addUserToGroupByEmail(
+    groupId: number,
+    email: string,
+    role: string = 'member',
+  ): Observable<AddUserByEmailResponse> {
+    return this.http.post<AddUserByEmailResponse>(
+      `${this.adminApiUrl}/${groupId}/users/by-email`,
+      {
+        email,
+        role,
+      },
     );
   }
 

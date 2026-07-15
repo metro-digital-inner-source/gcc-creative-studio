@@ -51,6 +51,16 @@
       />
       <mat-icon matSuffix>search</mat-icon>
     </mat-form-field>
+
+    <mat-form-field appearance="outline" class="min-w-[240px] !mb-0">
+      <mat-label>Filter by Group</mat-label>
+      <mat-select (selectionChange)="applyGroupFilter($event.value)">
+        <mat-option value="">All groups</mat-option>
+        <mat-option *ngFor="let group of groups" [value]="group.id">
+          {{ group.name }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
   </div>
 
   <!-- Loading Indicator -->

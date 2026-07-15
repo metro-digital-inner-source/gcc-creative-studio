@@ -36,7 +36,7 @@
     <mat-menu #workspaceMenu="matMenu" xPosition="after">
       <button
         mat-menu-item
-        *ngFor="let workspace of workspaces"
+        *ngFor="let workspace of selectableWorkspaces"
         (click)="setActiveWorkspace(workspace.id)"
       >
         <mat-icon

@@ -14,6 +14,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
+from fastapi import HTTPException
 from src.admin.admin_service import AdminService
 from src.admin.dto.admin_response_dto import (
     AdminOverviewStats,
@@ -22,7 +23,10 @@ from src.admin.dto.admin_response_dto import (
     AdminActiveRole,
     AdminGenerationHealth,
     AdminMonthlyActiveUsers,
+    UserProvisioningStatus,
 )
+from src.groups.schema.group_model import GroupModel
+from src.users.user_model import UserModel, UserRoleEnum
 
 
 @pytest.mark.asyncio
@@ -141,3 +145,163 @@ async def test_cleanup_stuck_jobs():
     service = AdminService(admin_repo=mock_repo)
     result = await service.cleanup_stuck_jobs()
     assert result == 5
+
+
+@pytest.mark.asyncio
+async def test_add_user_to_group_by_email_created():
+    mock_group_service = MagicMock()
+    mock_user_service = MagicMock()
+    mock_admin_repo = MagicMock()
+
+    provisioned_user = UserModel(
+        id=10,
+        email="new.user@example.com",
+        roles=[UserRoleEnum.USER],
+        name="New User",
+    )
+    group = GroupModel(
+        id=2,
+        name="Design",
+        shared_workspace_id=20,
+        members=[],
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z",
+    )
+    admin_user = UserModel(
+        id=1,
+        email="owner@example.com",
+        roles=[UserRoleEnum.ADMIN],
+        name="Owner",
+    )
+
+    mock_user_service.create_or_restore_user_by_email_for_admin = AsyncMock(
+        return_value=(provisioned_user, "created")
+    )
+    mock_group_service.add_member_to_group = AsyncMock(return_value=group)
+
+    service = AdminService(
+        admin_repo=mock_admin_repo,
+        group_service=mock_group_service,
+        user_service=mock_user_service,
+    )
+    response = await service.add_user_to_group_by_email(
+        group_id=2,
+        email="new.user@example.com",
+        role="member",
+        admin_user=admin_user,
+    )
+
+    assert response.provisioning_status == UserProvisioningStatus.CREATED
+    assert response.created_new_user is True
+    assert response.user_id == 10
+    assert response.email == "new.user@example.com"
+    assert response.group.id == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status",
+    [
+        "existing",
+        "restored",
+    ],
+)
+async def test_add_user_to_group_by_email_existing_or_restored(status):
+    mock_group_service = MagicMock()
+    mock_user_service = MagicMock()
+    mock_admin_repo = MagicMock()
+
+    provisioned_user = UserModel(
+        id=11,
+        email="existing.user@example.com",
+        roles=[UserRoleEnum.USER],
+        name="Existing User",
+    )
+    group = GroupModel(
+        id=3,
+        name="Marketing",
+        shared_workspace_id=30,
+        members=[],
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z",
+    )
+    admin_user = UserModel(
+        id=1,
+        email="owner@example.com",
+        roles=[UserRoleEnum.ADMIN],
+        name="Owner",
+    )
+
+    mock_user_service.create_or_restore_user_by_email_for_admin = AsyncMock(
+        return_value=(provisioned_user, status)
+    )
+    mock_group_service.add_member_to_group = AsyncMock(return_value=group)
+
+    service = AdminService(
+        admin_repo=mock_admin_repo,
+        group_service=mock_group_service,
+        user_service=mock_user_service,
+    )
+    response = await service.add_user_to_group_by_email(
+        group_id=3,
+        email="existing.user@example.com",
+        role="member",
+        admin_user=admin_user,
+    )
+
+    expected_status = (
+        UserProvisioningStatus.EXISTING
+        if status == "existing"
+        else UserProvisioningStatus.RESTORED
+    )
+    assert response.provisioning_status == expected_status
+    assert response.created_new_user is False
+    assert response.user_id == 11
+    assert response.group.id == 3
+
+
+@pytest.mark.asyncio
+async def test_add_user_to_group_by_email_conflict_propagates():
+    mock_group_service = MagicMock()
+    mock_user_service = MagicMock()
+    mock_admin_repo = MagicMock()
+
+    provisioned_user = UserModel(
+        id=12,
+        email="duplicate@example.com",
+        roles=[UserRoleEnum.USER],
+        name="Duplicate User",
+    )
+    admin_user = UserModel(
+        id=1,
+        email="owner@example.com",
+        roles=[UserRoleEnum.ADMIN],
+        name="Owner",
+    )
+
+    mock_user_service.create_or_restore_user_by_email_for_admin = AsyncMock(
+        return_value=(provisioned_user, "existing")
+    )
+    mock_group_service.add_member_to_group = AsyncMock(
+        side_effect=HTTPException(
+            status_code=409,
+            detail="User is already a member of this group.",
+        )
+    )
+
+    service = AdminService(
+        admin_repo=mock_admin_repo,
+        group_service=mock_group_service,
+        user_service=mock_user_service,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.add_user_to_group_by_email(
+            group_id=3,
+            email="duplicate@example.com",
+            role="member",
+            admin_user=admin_user,
+        )
+
+    assert exc_info.value.status_code == 409
+    assert "already a member" in exc_info.value.detail

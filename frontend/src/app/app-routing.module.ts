@@ -83,6 +83,12 @@ const routes: Routes = [
     canActivate: [AdminAuthGuard],
   },
   {
+    path: 'analytics',
+    loadChildren: () =>
+      import('./analytics/analytics.module').then(m => m.AnalyticsModule),
+    canActivate: [AdminAuthGuard],
+  },
+  {
     path: 'workflows',
     canActivate: [AuthGuardService],
     data: {requiredRoles: [UserRolesEnum.WORKFLOWS, UserRolesEnum.ADMIN]},

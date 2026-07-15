@@ -63,6 +63,25 @@ async def list_my_workspaces(
     return await workspace_service.list_workspaces_for_user(current_user)
 
 
+@router.get(
+    "/switcher",
+    response_model=list[WorkspaceModel],
+    summary="List Workspace Switcher Workspaces",
+)
+async def list_workspace_switcher_workspaces(
+    current_user: UserModel = Depends(get_current_user),
+    workspace_service: WorkspaceService = Depends(),
+):
+    """Retrieves switcher-focused workspaces for the current user.
+
+    Returns only private workspaces accessible by the user and excludes
+    group-shared workspaces.
+    """
+    return await workspace_service.list_switcher_workspaces_for_user(
+        current_user
+    )
+
+
 @router.post(
     "/{workspace_id}/invites",
     response_model=WorkspaceModel,

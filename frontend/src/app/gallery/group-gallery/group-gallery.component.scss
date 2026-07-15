@@ -14,18 +14,32 @@
  * limitations under the License.
  */
 
+
 .group-gallery-container {
-  padding: 2rem;
-  min-height: 100vh;
-  background: linear-gradient(to bottom, #f9fafb, #ffffff);
+  --max-container-width: 1400px;
+  background-color: transparent;
+  padding: 20px 40px;
+  max-width: var(--max-container-width);
+  margin: 0 auto;
+  margin-top: calc(10vh + 0px);
+  margin-left: max(calc(5vw + 4.5rem), calc(50% - var(--max-container-width) / 2));
 }
 
-.header-section {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+.video-container {
+  height: 15vh;
+  overflow: hidden;
+  position: relative;
+  border-radius: 1rem;
 }
 
 .gallery-grid {
   margin-top: 1rem;
+}
+
+.group-info-chip {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px);
 }
 
 .gallery-item {
@@ -38,4 +52,8 @@
 
 mat-form-field {
   width: 100%;
+}
+
+::ng-deep .mdc-label {
+  color: white !important;
 }
