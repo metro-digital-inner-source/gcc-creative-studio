@@ -157,6 +157,23 @@ async def get_current_user(
                     user_doc.id, {"picture": picture}
                 )
 
+        # Ensure admin users have access to the AI Enabler group
+        if UserRoleEnum.ADMIN in user_doc.roles:
+            try:
+                from src.groups.group_service import GroupService  # Local import to avoid circular dependency
+                
+                group_service = GroupService()
+                await group_service.ensure_admin_access_to_ai_enabler(user_doc)
+                logger.info("Admin user %s granted access to AI Enabler group", email)
+            except Exception as e:
+                logger.error(
+                    "Failed to ensure AI Enabler access for admin %s: %s",
+                    email,
+                    e,
+                )
+                # Don't fail auth if AI Enabler provisioning fails
+                pass
+
         return user_doc
 
     except auth.ExpiredIdTokenError as exc:

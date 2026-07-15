@@ -182,3 +182,157 @@ class TestRestoreItemsFromGroup:
         assert media_item.workspace_id == 100
         assert media_item.moved_to_group_id is None
         mock_media_repo.db.commit.assert_called_once()
+
+
+class TestEnsureAdminAccessToAIEnabler:
+    """Tests for automatic admin access to AI Enabler group."""
+
+    @pytest.mark.asyncio
+    async def test_ensure_admin_access_creates_ai_enabler_on_first_admin(
+        self,
+        mock_group_repo,
+        mock_workspace_service,
+        mock_media_repo,
+        mock_workspace_auth,
+    ):
+        """Test that first admin user creates AI Enabler group."""
+        from src.users.user_model import UserRoleEnum
+
+        group_service = GroupService(
+            group_repo=mock_group_repo,
+            workspace_service=mock_workspace_service,
+            media_repo=mock_media_repo,
+            workspace_auth=mock_workspace_auth,
+        )
+
+        admin_user = SimpleNamespace(
+            id=1,
+            email="admin@example.com",
+            roles=[UserRoleEnum.ADMIN],
+        )
+
+        # AI Enabler doesn't exist yet
+        mock_group_repo.find_ai_enabler_group.return_value = None
+
+        # Mock workspace creation
+        workspace = WorkspaceModel(
+            id=999, 
+            name="AI Enabler Workspace",
+            owner_id=1,
+        )
+        mock_workspace_service.create_workspace.return_value = workspace
+
+        # Mock group creation
+        ai_enabler_group = GroupModel(
+            id=50,
+            name="AI Enabler",
+            shared_workspace_id=999,
+            country_code=None,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        mock_group_repo.create_group.return_value = ai_enabler_group
+
+        # Mock get_by_id_with_members
+        mock_group_repo.get_by_id_with_members.return_value = ai_enabler_group
+
+        # Mock workspace_repo.add_member_to_workspace
+        mock_workspace_service.workspace_repo = AsyncMock()
+        mock_workspace_service.workspace_repo.add_member_to_workspace = AsyncMock()
+
+        result = await group_service.ensure_admin_access_to_ai_enabler(admin_user)
+
+        assert result.id == 50
+        assert result.name == "AI Enabler"
+        mock_group_repo.find_ai_enabler_group.assert_called_once()
+        mock_group_repo.create_group.assert_called_once_with(
+            name="AI Enabler",
+            shared_workspace_id=999,
+            country_code=None,
+        )
+        mock_group_repo.add_member.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_ensure_admin_access_adds_existing_admin_to_ai_enabler(
+        self,
+        mock_group_repo,
+        mock_workspace_service,
+        mock_media_repo,
+        mock_workspace_auth,
+    ):
+        """Test that existing admin user is added to existing AI Enabler group."""
+        from src.users.user_model import UserRoleEnum
+        from src.groups.schema.group_model import GroupMemberRoleEnum
+
+        group_service = GroupService(
+            group_repo=mock_group_repo,
+            workspace_service=mock_workspace_service,
+            media_repo=mock_media_repo,
+            workspace_auth=mock_workspace_auth,
+        )
+
+        admin_user = SimpleNamespace(
+            id=2,
+            email="admin2@example.com",
+            roles=[UserRoleEnum.ADMIN],
+        )
+
+        # AI Enabler already exists
+        ai_enabler_group = GroupModel(
+            id=50,
+            name="AI Enabler",
+            shared_workspace_id=999,
+            country_code=None,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        mock_group_repo.find_ai_enabler_group.return_value = ai_enabler_group
+
+        # Mock upsert_group_member
+        mock_group_repo.upsert_group_member = AsyncMock(return_value=True)
+
+        # Mock workspace_repo.add_member_to_workspace
+        mock_workspace_service.workspace_repo = AsyncMock()
+        mock_workspace_service.workspace_repo.add_member_to_workspace = AsyncMock()
+
+        # Mock get_by_id_with_members
+        mock_group_repo.get_by_id_with_members.return_value = ai_enabler_group
+
+        result = await group_service.ensure_admin_access_to_ai_enabler(admin_user)
+
+        assert result.id == 50
+        mock_group_repo.find_ai_enabler_group.assert_called_once()
+        mock_group_repo.upsert_group_member.assert_called_once_with(
+            group_id=50,
+            user_id=2,
+            role=GroupMemberRoleEnum.ADMIN,
+        )
+
+    @pytest.mark.asyncio
+    async def test_ensure_admin_access_returns_none_for_non_admin(
+        self,
+        mock_group_repo,
+        mock_workspace_service,
+        mock_media_repo,
+        mock_workspace_auth,
+    ):
+        """Test that non-admin users are not granted AI Enabler access."""
+        from src.users.user_model import UserRoleEnum
+
+        group_service = GroupService(
+            group_repo=mock_group_repo,
+            workspace_service=mock_workspace_service,
+            media_repo=mock_media_repo,
+            workspace_auth=mock_workspace_auth,
+        )
+
+        non_admin_user = SimpleNamespace(
+            id=3,
+            email="user@example.com",
+            roles=[],  # Not an admin
+        )
+
+        result = await group_service.ensure_admin_access_to_ai_enabler(non_admin_user)
+
+        assert result is None
+        mock_group_repo.find_ai_enabler_group.assert_not_called()

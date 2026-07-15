@@ -27,7 +27,13 @@ from src.groups.schema.group_model import (
     GroupModel,
     GroupUsageDaily,
 )
+from src.workspaces.schema.workspace_model import Workspace, WorkspaceMember
 from src.users.user_model import User
+from src.workspaces.schema.workspace_model import (
+    WorkspaceMember,
+    WorkspaceRoleEnum,
+    WorkspaceScopeEnum,
+)
 
 
 class GroupRepository(BaseRepository[Group, GroupModel]):
@@ -124,6 +130,38 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
         )
         return result.scalar_one_or_none() is not None
 
+    async def upsert_group_member(
+        self,
+        group_id: int,
+        user_id: int,
+        role: GroupMemberRoleEnum = GroupMemberRoleEnum.MEMBER,
+    ) -> bool:
+        """Adds or updates a member's role in a group. Returns True if added/updated."""
+        result = await self.db.execute(
+            select(GroupMember).where(
+                GroupMember.group_id == group_id,
+                GroupMember.user_id == user_id,
+            )
+        )
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            # Update role if changed
+            if existing.role != role.value:
+                existing.role = role.value
+                await self.db.commit()
+            return False  # Already existed
+
+        # Add new member
+        db_member = GroupMember(
+            group_id=group_id,
+            user_id=user_id,
+            role=role.value,
+        )
+        self.db.add(db_member)
+        await self.db.commit()
+        return True  # Newly added
+
     async def get_all_groups(self) -> list[GroupModel]:
         """Gets all groups (admin use)."""
         result = await self.db.execute(
@@ -131,6 +169,14 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
         )
         groups = result.scalars().all()
         return [self._map_to_schema(g) for g in groups]
+
+    async def find_ai_enabler_group(self) -> GroupModel | None:
+        """Finds the 'AI Enabler' group by name."""
+        result = await self.db.execute(
+            select(self.model).where(self.model.name == "AI Enabler")
+        )
+        group = result.scalar_one_or_none()
+        return self._map_to_schema(group) if group else None
 
     async def get_all_shared_workspace_ids(self) -> set[int]:
         """Gets all shared workspace IDs referenced by groups."""

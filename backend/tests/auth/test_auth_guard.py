@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
