@@ -175,6 +175,8 @@ class AdminService:
         try:
             from src.workspaces.dto.create_workspace_dto import CreateWorkspaceDto
             from src.workspaces.workspace_service import WorkspaceService
+            from src.workspaces.workspace_model import WorkspaceModel
+            from sqlalchemy import update
             
             workspace_service = WorkspaceService()
             workspace_name = f"{email}"  # Use email as workspace name
@@ -183,17 +185,19 @@ class AdminService:
             # Create workspace with user as owner
             workspace = await workspace_service.create_workspace(user, create_dto)
             
-            # Associate workspace with group
+            # Associate workspace with group using SQLAlchemy
             # (This links the workspace to the group so it appears under the group)
-            await self.admin_repo.db.execute(
-                f"UPDATE workspaces SET group_id = {group_id} WHERE id = {workspace.id}"
-            )
-            await self.admin_repo.db.commit()
+            update_stmt = update(WorkspaceModel).where(
+                WorkspaceModel.id == workspace.id
+            ).values(group_id=group_id)
+            
+            await workspace_service.workspace_repo.db.execute(update_stmt)
+            await workspace_service.workspace_repo.db.commit()
             
             self.logger.info(f"Created private workspace '{workspace_name}' (ID: {workspace.id}) for user {email} in group {group_id}")
         except Exception as e:
-            self.logger.error(f"Failed to create private workspace for {email}: {e}")
-            # Don't fail the entire operation if workspace creation fails
+            self.logger.error(f"Failed to create private workspace for {email}: {e}", exc_info=True)
+            # Non-blocking: workspace exists but group link may have failed
             pass
 
         return AddUserByEmailResponse(
