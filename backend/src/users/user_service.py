@@ -24,6 +24,9 @@ from src.users.dto.user_create_dto import UserCreateDto, UserUpdateRoleDto
 from src.users.dto.user_search_dto import UserSearchDto
 from src.users.repository.user_repository import UserRepository
 from src.users.user_model import User, UserModel, UserRoleEnum
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class UserService:
@@ -158,7 +161,42 @@ class UserService:
     async def delete_user(
         self, user_id: int, deleted_by: int | None = None
     ) -> bool:
-        """Soft deletes a user."""
+        """Soft deletes a user.
+        
+        Before deletion, checks if user owns any workspaces. If they own critical
+        workspaces (like group shared workspaces), transfers ownership to another
+        admin or prevents deletion.
+        """
+        from src.workspaces.repository.workspace_repository import WorkspaceRepository
+        from src.workspaces.workspace_model import Workspace
+        from sqlalchemy import select
+        
+        workspace_repo = WorkspaceRepository()
+        
+        # Check if user owns any workspaces
+        stmt = select(Workspace).where(Workspace.owner_id == user_id)
+        result = await workspace_repo.db.execute(stmt)
+        owned_workspaces = result.scalars().all()
+        
+        if owned_workspaces:
+            # Find another admin to transfer ownership to
+            from src.users.user_model import User
+            admin_query = select(User).where(
+                (User.roles.contains(["admin"])) | (User.roles.contains(["ADMIN"]))
+            ).where(User.id != user_id).where(User.deleted_at == None).limit(1)
+            
+            admin_result = await workspace_repo.db.execute(admin_query)
+            admin_user = admin_result.scalar_one_or_none()
+            
+            if admin_user:
+                # Transfer all workspace ownership to admin
+                logger.info(f"Transferring {len(owned_workspaces)} workspaces from user {user_id} to admin {admin_user.id}")
+                for workspace in owned_workspaces:
+                    await workspace_repo.update(workspace.id, {"owner_id": admin_user.id})
+            else:
+                logger.warning(f"Cannot delete user {user_id}: owns {len(owned_workspaces)} workspaces and no admin available for transfer")
+                return False
+        
         return await self.user_repo.soft_delete(user_id, deleted_by=deleted_by)
 
     async def restore_user(self, user_id: int) -> bool:
