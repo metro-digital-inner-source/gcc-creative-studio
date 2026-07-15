@@ -426,7 +426,7 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
       if (result) {
         this.isLoading = true;
         this.groupService
-          .addUserToGroupByEmail(result.groupId, result.email, result.role)
+          .addUserToGroupByEmail(result.groupId, result.email)
           .subscribe({
             next: () => {
               handleSuccessSnackbar(this._snackBar, 'User added to group successfully!');

@@ -26,7 +26,6 @@ export interface AddUserDialogData {
 export interface AddUserDialogResult {
   email: string;
   groupId: number;
-  role: 'member' | 'admin';
 }
 
 @Component({
@@ -59,13 +58,9 @@ export interface AddUserDialogResult {
           </mat-error>
         </mat-form-field>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Role in Group</mat-label>
-          <mat-select formControlName="role">
-            <mat-option value="member">Member</mat-option>
-            <mat-option value="admin">Admin</mat-option>
-          </mat-select>
-        </mat-form-field>
+        <p class="text-sm text-gray-400 mt-2">
+          User will be added as a member with their own private workspace in this group.
+        </p>
       </div>
 
       <div mat-dialog-actions align="end" class="mt-4">
@@ -88,7 +83,6 @@ export class AddUserDialogComponent {
     this.form = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
       groupId: [null as number | null, Validators.required],
-      role: ['member' as 'member' | 'admin', Validators.required],
     });
   }
 
@@ -102,7 +96,6 @@ export class AddUserDialogComponent {
     this.dialogRef.close({
       email: (value.email || '').trim().toLowerCase(),
       groupId: Number(value.groupId),
-      role: value.role || 'member',
     } as AddUserDialogResult);
   }
 }

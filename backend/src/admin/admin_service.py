@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from datetime import datetime, timedelta
 from fastapi import Depends
 
@@ -42,6 +43,7 @@ class AdminService:
         self.admin_repo = admin_repo
         self.group_service = group_service
         self.user_service = user_service
+        self.logger = logging.getLogger(__name__)
 
     async def get_overview_stats(
         self, start_date: str | None = None, end_date: str | None = None
@@ -147,11 +149,13 @@ class AdminService:
         role: str,
         admin_user: UserModel,
     ) -> AddUserByEmailResponse:
-        """Creates/gets a user by email and assigns them to a group."""
-        try:
-            member_role = GroupMemberRoleEnum(role)
-        except ValueError:
-            member_role = GroupMemberRoleEnum.MEMBER
+        """Creates/gets a user by email, assigns them to a group as MEMBER,
+        and creates a private workspace for them.
+        
+        Each group member gets their own private workspace within the group.
+        """
+        # Always use MEMBER role - role parameter is ignored for UI simplification
+        member_role = GroupMemberRoleEnum.MEMBER
 
         user, provisioning_status = (
             await self.user_service.create_or_restore_user_by_email_for_admin(
@@ -159,12 +163,38 @@ class AdminService:
             )
         )
 
+        # Add user to group as MEMBER
         group = await self.group_service.add_member_to_group(
             group_id,
             user.id,
             member_role,
             admin_user,
         )
+
+        # Create a private workspace for the user within this group
+        try:
+            from src.workspaces.dto.create_workspace_dto import CreateWorkspaceDto
+            from src.workspaces.workspace_service import WorkspaceService
+            
+            workspace_service = WorkspaceService()
+            workspace_name = f"{email}"  # Use email as workspace name
+            create_dto = CreateWorkspaceDto(name=workspace_name)
+            
+            # Create workspace with user as owner
+            workspace = await workspace_service.create_workspace(user, create_dto)
+            
+            # Associate workspace with group
+            # (This links the workspace to the group so it appears under the group)
+            await self.admin_repo.db.execute(
+                f"UPDATE workspaces SET group_id = {group_id} WHERE id = {workspace.id}"
+            )
+            await self.admin_repo.db.commit()
+            
+            self.logger.info(f"Created private workspace '{workspace_name}' (ID: {workspace.id}) for user {email} in group {group_id}")
+        except Exception as e:
+            self.logger.error(f"Failed to create private workspace for {email}: {e}")
+            # Don't fail the entire operation if workspace creation fails
+            pass
 
         return AddUserByEmailResponse(
             provisioning_status=UserProvisioningStatus(provisioning_status),

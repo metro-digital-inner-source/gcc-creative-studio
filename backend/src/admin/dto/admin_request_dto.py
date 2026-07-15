@@ -16,7 +16,9 @@ from pydantic import BaseModel, EmailStr
 
 
 class AddUserByEmailRequest(BaseModel):
-    """Request payload for direct admin user provisioning into a group."""
+    """Request payload for direct admin user provisioning into a group.
+    
+    Users are always added as Members with their own private workspace.
+    """
 
     email: EmailStr
-    role: str = "member"

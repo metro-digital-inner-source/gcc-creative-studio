@@ -127,18 +127,17 @@ export class GroupService {
   }
 
   /**
-   * Add or provision a user by email and assign to a group (admin only)
+   * Add or provision a user by email and assign to a group as MEMBER (admin only)
+   * User automatically gets their own private workspace.
    */
   addUserToGroupByEmail(
     groupId: number,
     email: string,
-    role: string = 'member',
   ): Observable<AddUserByEmailResponse> {
     return this.http.post<AddUserByEmailResponse>(
       `${this.adminApiUrl}/${groupId}/users/by-email`,
       {
         email,
-        role,
       },
     );
   }

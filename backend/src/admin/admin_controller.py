@@ -192,11 +192,13 @@ async def add_user_to_group_by_email(
     admin_service: AdminService = Depends(),
     current_user: UserModel = Depends(get_current_user),
 ):
-    """Creates/gets a user by email and assigns them to a group immediately."""
+    """Creates/gets a user by email and assigns them to a group as MEMBER.
+    User automatically gets their own private workspace.
+    """
     return await admin_service.add_user_to_group_by_email(
         group_id=group_id,
         email=request.email,
-        role=request.role,
+        role="member",  # Always member
         admin_user=current_user,
     )
 
