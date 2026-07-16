@@ -68,14 +68,25 @@ class UserService:
         picture: str | None,
     ) -> UserModel:
         """Retrieves a user by their email. If the user exists, it returns it.
+        If the user is soft-deleted, it restores them.
         If the user doesn't exist, it creates a new user document.
         """
         normalized_email = email.strip().lower()
 
-        # 1. Check if the user already exists in the database.
-        existing_user = await self.user_repo.get_by_email(normalized_email)
+        # 1. Check if the user already exists in the database (including deleted).
+        existing_user = await self.user_repo.get_by_email(
+            normalized_email, include_deleted=True
+        )
 
         if existing_user:
+            # Restore soft-deleted user
+            if existing_user.deleted_at is not None:
+                logger.info(
+                    "Restoring soft-deleted user during login: %s", normalized_email
+                )
+                await self.user_repo.restore(existing_user.id)
+                existing_user = await self.user_repo.get_by_id(existing_user.id)
+
             if await self._should_bootstrap_admin(
                 normalized_email
             ) and not self._has_admin_role(existing_user.roles):

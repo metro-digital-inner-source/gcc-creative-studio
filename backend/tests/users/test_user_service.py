@@ -55,7 +55,9 @@ class TestCreateUserIfNotExists:
 
         # Assertions
         assert result == mock_user
-        mock_user_repo.get_by_email.assert_called_once_with("user@example.com")
+        mock_user_repo.get_by_email.assert_called_once_with(
+            "user@example.com", include_deleted=True
+        )
         # Verify create was NOT called
         mock_user_repo.create.assert_not_called()
 
@@ -77,7 +79,9 @@ class TestCreateUserIfNotExists:
 
         # Assertions
         assert result == mock_user
-        mock_user_repo.get_by_email.assert_called_once_with("new@example.com")
+        mock_user_repo.get_by_email.assert_called_once_with(
+            "new@example.com", include_deleted=True
+        )
 
         # Verify create was called with correct data
         called_args = mock_user_repo.create.call_args[0][0]
@@ -98,7 +102,55 @@ class TestCreateUserIfNotExists:
         )
 
         assert result == mock_user
-        mock_user_repo.get_by_email.assert_called_once_with("user@example.com")
+        mock_user_repo.get_by_email.assert_called_once_with(
+            "user@example.com", include_deleted=True
+        )
+
+    @pytest.mark.anyio
+    async def test_soft_deleted_user_is_restored(
+        self, user_service, mock_user_repo, mock_user
+    ):
+        """Test that a soft-deleted user is automatically restored during login."""
+        # Setup: Create a soft-deleted user
+        from datetime import datetime
+
+        deleted_user = MagicMock()
+        deleted_user.id = 1
+        deleted_user.email = "deleted@example.com"
+        deleted_user.deleted_at = datetime(2025, 1, 1)
+        deleted_user.roles = [UserRoleEnum.USER]
+
+        restored_user = MagicMock()
+        restored_user.id = 1
+        restored_user.email = "deleted@example.com"
+        restored_user.deleted_at = None
+        restored_user.roles = [UserRoleEnum.USER]
+
+        # Mock get_by_email to return the soft-deleted user
+        mock_user_repo.get_by_email.return_value = deleted_user
+        # Mock restore to update the user
+        mock_user_repo.restore.return_value = None
+        # Mock get_by_id to return the restored user
+        mock_user_repo.get_by_id.return_value = restored_user
+
+        # Action: Call service method
+        result = await user_service.create_user_if_not_exists(
+            email="deleted@example.com",
+            name="Previously Deleted User",
+            picture="http://pic.jpg",
+        )
+
+        # Assertions
+        assert result == restored_user
+        mock_user_repo.get_by_email.assert_called_once_with(
+            "deleted@example.com", include_deleted=True
+        )
+        # Verify restore was called
+        mock_user_repo.restore.assert_called_once_with(1)
+        # Verify get_by_id was called to fetch the restored user
+        mock_user_repo.get_by_id.assert_called_once_with(1)
+        # Verify create was NOT called (user was restored, not created)
+        mock_user_repo.create.assert_not_called()
 
 
 class TestGetUserById:
