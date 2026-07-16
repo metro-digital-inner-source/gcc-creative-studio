@@ -160,9 +160,37 @@ async def get_current_user(
         # Ensure admin users have access to the AI Enabler group
         if UserRoleEnum.ADMIN in user_doc.roles:
             try:
-                from src.groups.group_service import GroupService  # Local import to avoid circular dependency
+                from src.groups.group_service import GroupService
+                from src.groups.repository.group_repository import GroupRepository
+                from src.images.repository.media_item_repository import MediaRepository
+                from src.workspaces.workspace_auth_guard import WorkspaceAuth
+                from src.workspaces.repository.workspace_repository import WorkspaceRepository
+                from src.common.email_service import EmailService
                 
-                group_service = GroupService()
+                # Get database session from existing user_service
+                db_session = user_service.user_repo.db
+                
+                # Manually instantiate all required dependencies
+                group_repo = GroupRepository(db=db_session)
+                workspace_repo = WorkspaceRepository(db=db_session)
+                media_repo = MediaRepository(db=db_session)
+                email_service = EmailService()
+                workspace_auth = WorkspaceAuth()
+                
+                workspace_service = WorkspaceService(
+                    workspace_repo=workspace_repo,
+                    user_repo=user_service.user_repo,
+                    group_repo=group_repo,
+                    email_service=email_service,
+                )
+                
+                group_service = GroupService(
+                    group_repo=group_repo,
+                    workspace_service=workspace_service,
+                    media_repo=media_repo,
+                    workspace_auth=workspace_auth,
+                )
+                
                 await group_service.ensure_admin_access_to_ai_enabler(user_doc)
                 logger.info("Admin user %s granted access to AI Enabler group", email)
             except Exception as e:
@@ -170,6 +198,7 @@ async def get_current_user(
                     "Failed to ensure AI Enabler access for admin %s: %s",
                     email,
                     e,
+                    exc_info=True,
                 )
                 # Don't fail auth if AI Enabler provisioning fails
                 pass
