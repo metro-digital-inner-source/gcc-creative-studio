@@ -33,7 +33,7 @@ from src.users.user_model import UserModel
 from src.users.user_service import UserService
 from src.workspaces.workspace_service import WorkspaceService
 from src.workspaces.dto.create_workspace_dto import CreateWorkspaceDto
-from src.workspaces.schema.workspace_model import WorkspaceMember, WorkspaceRoleEnum
+from src.workspaces.schema.workspace_model import WorkspaceMember, WorkspaceRoleEnum, WorkspaceScopeEnum
 
 
 class AdminService:
@@ -193,12 +193,11 @@ class AdminService:
                 )
             else:
                 # Create new shared workspace for the group
-                shared_dto = CreateWorkspaceDto(name=shared_ws_name)
+                shared_dto = CreateWorkspaceDto(name=shared_ws_name, scope=WorkspaceScopeEnum.GLOBAL)
                 shared_workspace = await self.workspace_service.create_workspace(
                     admin_user,  # Group admin as creator/owner
                     shared_dto,
                 )
-                # Note: workspace created as PRIVATE by default, will be made GLOBAL via scope
                 self.logger.info(
                     f"Created shared workspace '{shared_ws_name}' "
                     f"(ID: {shared_workspace.id}) for group {group_id}"

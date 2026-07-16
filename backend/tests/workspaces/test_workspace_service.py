@@ -270,16 +270,23 @@ class TestListSwitcherWorkspacesForUser:
     ):
         w1 = WorkspaceModel(id=1, name="Private A", owner_id=mock_user.id)
         w2 = WorkspaceModel(id=2, name="Private B", owner_id=mock_user.id)
+        w_global = WorkspaceModel(id=3, name="AI Enabler", owner_id=99)
         mock_workspace_repo.find_private_by_member_id.return_value = [w1, w2]
         mock_group_repo.get_all_shared_workspace_ids.return_value = {2}
+        mock_workspace_repo.find_global_by_member_id.return_value = [w_global]
 
         result = await workspace_service.list_switcher_workspaces_for_user(
             mock_user
         )
 
-        assert len(result) == 1
+        # w2 excluded (in shared_ids), w1 (personal PRIVATE) + w_global (GLOBAL) returned
+        assert len(result) == 2
         assert result[0].id == 1
+        assert result[1].id == 3
         mock_workspace_repo.find_private_by_member_id.assert_called_once_with(
+            mock_user.id
+        )
+        mock_workspace_repo.find_global_by_member_id.assert_called_once_with(
             mock_user.id
         )
 
@@ -300,15 +307,19 @@ class TestListSwitcherWorkspacesForUser:
         )
         w1 = WorkspaceModel(id=10, name="Private Admin", owner_id=99)
         w2 = WorkspaceModel(id=11, name="Group Shared", owner_id=3)
+        w_global = WorkspaceModel(id=12, name="AI Enabler", owner_id=99)
         mock_workspace_repo.find_all_private.return_value = [w1, w2]
         mock_group_repo.get_all_shared_workspace_ids.return_value = {11}
+        mock_workspace_repo.find_global_by_member_id.return_value = [w_global]
 
         result = await workspace_service.list_switcher_workspaces_for_user(
             admin_user
         )
 
-        assert len(result) == 1
+        # w2 excluded (in shared_ids), w1 (personal) + w_global (GLOBAL) returned
+        assert len(result) == 2
         assert result[0].id == 10
+        assert result[1].id == 12
         mock_workspace_repo.find_all_private.assert_called_once_with(
             limit=1000,
             offset=0,

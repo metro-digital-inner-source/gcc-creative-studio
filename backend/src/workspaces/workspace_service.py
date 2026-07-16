@@ -62,6 +62,7 @@ class WorkspaceService:
         new_workspace = WorkspaceModel(
             name=create_dto.name,
             owner_id=user.id,
+            scope=create_dto.scope,
         )
         return await self.workspace_repo.create(
             new_workspace,
@@ -205,11 +206,18 @@ class WorkspaceService:
         shared_workspace_ids = (
             await self.group_repo.get_all_shared_workspace_ids()
         )
-        return [
+        personal_workspaces = [
             workspace
             for workspace in private_workspaces
             if workspace.id not in shared_workspace_ids
         ]
+
+        # Also include GLOBAL (group-shared) workspaces the user is a member of
+        global_workspaces = (
+            await self.workspace_repo.find_global_by_member_id(user.id)
+        )
+
+        return personal_workspaces + global_workspaces
 
     async def check_workspace_name_exists(self, name: str) -> bool:
         """Check if workspace name already exists globally.

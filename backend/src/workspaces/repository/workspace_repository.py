@@ -151,6 +151,21 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
         workspaces = result.scalars().all()
         return [self._map_to_schema(w) for w in workspaces]
 
+    async def find_global_by_member_id(
+        self, user_id: int
+    ) -> list[WorkspaceModel]:
+        """Finds global (group-shared) workspaces where the user is a member."""
+        result = await self.db.execute(
+            select(self.model)
+            .join(WorkspaceMemberAssociation)
+            .where(
+                WorkspaceMemberAssociation.user_id == user_id,
+                self.model.scope == WorkspaceScopeEnum.GLOBAL.value,
+            ),
+        )
+        workspaces = result.scalars().all()
+        return [self._map_to_schema(w) for w in workspaces]
+
     async def find_all_private(
         self,
         limit: int,

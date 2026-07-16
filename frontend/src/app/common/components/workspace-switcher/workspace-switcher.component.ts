@@ -123,7 +123,9 @@ export class WorkspaceSwitcherComponent implements OnInit {
   private setWorkspaceCollections(workspaces: Workspace[]): void {
     this.workspaces = workspaces;
     this.selectableWorkspaces = workspaces.filter(
-      workspace => workspace.scope === WorkspaceScope.PRIVATE,
+      workspace =>
+        workspace.scope === WorkspaceScope.PRIVATE ||
+        workspace.scope === WorkspaceScope.GLOBAL,
     );
     this.initializeActiveWorkspace();
   }

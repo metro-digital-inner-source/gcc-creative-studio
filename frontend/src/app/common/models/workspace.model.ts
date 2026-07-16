@@ -19,6 +19,7 @@ import {WorkspaceMember} from './workspace-member.model';
 export enum WorkspaceScope {
   PUBLIC = 'public',
   PRIVATE = 'private',
+  GLOBAL = 'global',
 }
 
 export interface Workspace {
