@@ -189,36 +189,21 @@ class WorkspaceService:
         """Returns workspaces for the switcher UI contract.
 
         Returns:
-        - Personal PRIVATE workspaces (user's own)
-        - GLOBAL workspaces (group-shared):
-          - For admins: ALL GLOBAL workspaces in the system
-          - For non-admins: only GLOBAL where user is a member
+        - Personal PRIVATE workspaces (only where user is a member/owner)
+        - GLOBAL workspaces (group-shared, only where user is a member)
+        
+        Access control: Users (including admins) only see workspaces they belong to.
+        Admins do not get special visibility into other users' private workspaces.
         """
-        is_system_admin = UserRoleEnum.ADMIN in user.roles
+        # 1. Get personal PRIVATE workspaces (only user's own)
+        personal_workspaces = (
+            await self.workspace_repo.find_private_by_member_id(user.id)
+        )
 
-        # 1. Get personal PRIVATE workspaces (user's own)
-        if is_system_admin:
-            personal_workspaces = await self.workspace_repo.find_all_private(
-                limit=1000,
-                offset=0,
-            )
-        else:
-            personal_workspaces = (
-                await self.workspace_repo.find_private_by_member_id(user.id)
-            )
-
-        # 2. Get GLOBAL workspaces
-        if is_system_admin:
-            # Admins see all GLOBAL workspaces
-            global_workspaces = await self.workspace_repo.find_all_global(
-                limit=1000,
-                offset=0,
-            )
-        else:
-            # Non-admins see only GLOBAL workspaces they're a member of
-            global_workspaces = (
-                await self.workspace_repo.find_global_by_member_id(user.id)
-            )
+        # 2. Get GLOBAL workspaces (only where user is a member)
+        global_workspaces = (
+            await self.workspace_repo.find_global_by_member_id(user.id)
+        )
 
         return personal_workspaces + global_workspaces
 
