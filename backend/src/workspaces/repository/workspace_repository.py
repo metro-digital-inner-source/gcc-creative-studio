@@ -186,6 +186,17 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
         )
         return result.scalar_one_or_none()
 
+    async def find_by_name(self, name: str) -> WorkspaceModel | None:
+        """Find workspace by name (global uniqueness check).
+        
+        Returns the workspace if found, None otherwise.
+        """
+        result = await self.db.execute(
+            select(self.model).where(self.model.name == name),
+        )
+        workspace = result.scalar_one_or_none()
+        return self._map_to_schema(workspace) if workspace else None
+
     def _map_to_schema(self, workspace: Workspace) -> WorkspaceModel:
         """Helper to map SQLAlchemy Workspace to Pydantic WorkspaceModel."""
         # Create the Pydantic model

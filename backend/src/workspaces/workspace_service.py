@@ -210,3 +210,11 @@ class WorkspaceService:
             for workspace in private_workspaces
             if workspace.id not in shared_workspace_ids
         ]
+
+    async def check_workspace_name_exists(self, name: str) -> bool:
+        """Check if workspace name already exists globally.
+        
+        Returns True if a workspace with this name exists, False otherwise.
+        """
+        existing = await self.workspace_repo.find_by_name(name)
+        return existing is not None

@@ -54,6 +54,7 @@ class TestCreateWorkspace:
             owner_id=mock_user.id,
         )
         mock_workspace_service.create_workspace.return_value = mock_workspace
+        mock_workspace_service.check_workspace_name_exists.return_value = False
 
         response = api_client.post(
             "/api/workspaces", json={"name": "My Workspace"}
@@ -63,6 +64,25 @@ class TestCreateWorkspace:
         data = response.json()
         assert data["name"] == "My Workspace"
         assert data["id"] == 1
+
+    def test_create_workspace_duplicate_name_fails(
+        self,
+        api_client,
+        mock_workspace_service,
+        mock_user,
+    ):
+        """Test that creating a workspace with an existing name returns 409 CONFLICT."""
+        mock_workspace_service.check_workspace_name_exists.return_value = True
+
+        response = api_client.post(
+            "/api/workspaces", json={"name": "Existing Workspace"}
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        data = response.json()
+        assert "Workspace name taken" in data["detail"]
+        # Verify create_workspace was NOT called
+        mock_workspace_service.create_workspace.assert_not_called()
 
 
 class TestListMyWorkspaces:

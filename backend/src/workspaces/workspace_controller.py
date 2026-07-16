@@ -44,7 +44,18 @@ async def create_workspace(
 ):
     """Creates a new private workspace for the currently authenticated user.
     The creator is automatically assigned as the 'OWNER'.
+    
+    Validates that the workspace name is globally unique.
+    Raises 409 CONFLICT if a workspace with this name already exists.
     """
+    # Validate workspace name uniqueness (GLOBAL)
+    name_exists = await workspace_service.check_workspace_name_exists(create_dto.name)
+    if name_exists:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Workspace name taken. Please choose another name.",
+        )
+    
     return await workspace_service.create_workspace(current_user, create_dto)
 
 

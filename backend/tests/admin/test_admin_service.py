@@ -152,6 +152,8 @@ async def test_add_user_to_group_by_email_created():
     mock_group_service = MagicMock()
     mock_user_service = MagicMock()
     mock_admin_repo = MagicMock()
+    mock_workspace_service = MagicMock()
+    mock_workspace_repo = MagicMock()
 
     provisioned_user = UserModel(
         id=10,
@@ -178,11 +180,22 @@ async def test_add_user_to_group_by_email_created():
         return_value=(provisioned_user, "created")
     )
     mock_group_service.add_member_to_group = AsyncMock(return_value=group)
+    
+    # Mock workspace methods
+    mock_workspace_service.check_workspace_name_exists = AsyncMock(return_value=False)
+    mock_workspace_service.create_workspace = AsyncMock(
+        return_value=MagicMock(id=100, name="Design")
+    )
+    mock_workspace_repo.is_member = AsyncMock(return_value=False)
+    mock_workspace_repo.add_member_to_workspace = AsyncMock()
+    mock_workspace_repo.find_by_name = AsyncMock(return_value=None)
+    mock_workspace_service.workspace_repo = mock_workspace_repo
 
     service = AdminService(
         admin_repo=mock_admin_repo,
         group_service=mock_group_service,
         user_service=mock_user_service,
+        workspace_service=mock_workspace_service,
     )
     response = await service.add_user_to_group_by_email(
         group_id=2,
@@ -210,6 +223,8 @@ async def test_add_user_to_group_by_email_existing_or_restored(status):
     mock_group_service = MagicMock()
     mock_user_service = MagicMock()
     mock_admin_repo = MagicMock()
+    mock_workspace_service = MagicMock()
+    mock_workspace_repo = MagicMock()
 
     provisioned_user = UserModel(
         id=11,
@@ -236,11 +251,22 @@ async def test_add_user_to_group_by_email_existing_or_restored(status):
         return_value=(provisioned_user, status)
     )
     mock_group_service.add_member_to_group = AsyncMock(return_value=group)
+    
+    # Mock workspace methods
+    mock_workspace_service.check_workspace_name_exists = AsyncMock(return_value=False)
+    mock_workspace_service.create_workspace = AsyncMock(
+        return_value=MagicMock(id=100, name="Marketing")
+    )
+    mock_workspace_repo.is_member = AsyncMock(return_value=False)
+    mock_workspace_repo.add_member_to_workspace = AsyncMock()
+    mock_workspace_repo.find_by_name = AsyncMock(return_value=None)
+    mock_workspace_service.workspace_repo = mock_workspace_repo
 
     service = AdminService(
         admin_repo=mock_admin_repo,
         group_service=mock_group_service,
         user_service=mock_user_service,
+        workspace_service=mock_workspace_service,
     )
     response = await service.add_user_to_group_by_email(
         group_id=3,
@@ -265,6 +291,7 @@ async def test_add_user_to_group_by_email_conflict_propagates():
     mock_group_service = MagicMock()
     mock_user_service = MagicMock()
     mock_admin_repo = MagicMock()
+    mock_workspace_service = MagicMock()
 
     provisioned_user = UserModel(
         id=12,
@@ -293,6 +320,7 @@ async def test_add_user_to_group_by_email_conflict_propagates():
         admin_repo=mock_admin_repo,
         group_service=mock_group_service,
         user_service=mock_user_service,
+        workspace_service=mock_workspace_service,
     )
 
     with pytest.raises(HTTPException) as exc_info:

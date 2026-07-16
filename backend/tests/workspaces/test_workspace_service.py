@@ -313,3 +313,36 @@ class TestListSwitcherWorkspacesForUser:
             limit=1000,
             offset=0,
         )
+
+
+class TestCheckWorkspaceNameExists:
+    """Tests for WorkspaceService.check_workspace_name_exists."""
+
+    @pytest.mark.anyio
+    async def test_check_workspace_name_exists_true(
+        self,
+        workspace_service,
+        mock_workspace_repo,
+    ):
+        """Test that check_workspace_name_exists returns True when workspace exists."""
+        existing_workspace = WorkspaceModel(id=1, name="Test", owner_id=1)
+        mock_workspace_repo.find_by_name.return_value = existing_workspace
+
+        result = await workspace_service.check_workspace_name_exists("Test")
+
+        assert result is True
+        mock_workspace_repo.find_by_name.assert_called_once_with("Test")
+
+    @pytest.mark.anyio
+    async def test_check_workspace_name_exists_false(
+        self,
+        workspace_service,
+        mock_workspace_repo,
+    ):
+        """Test that check_workspace_name_exists returns False when workspace doesn't exist."""
+        mock_workspace_repo.find_by_name.return_value = None
+
+        result = await workspace_service.check_workspace_name_exists("NonExistent")
+
+        assert result is False
+        mock_workspace_repo.find_by_name.assert_called_once_with("NonExistent")
