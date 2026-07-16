@@ -372,6 +372,9 @@ class GroupRepository(BaseRepository[Group, GroupModel]):
 
         members = []
         for member in group.members:
+            # Skip members with deleted users (defensive programming)
+            if member.user is None:
+                continue
             # Member.user is loaded via lazy="selectin"
             members.append(
                 GroupMemberModel(

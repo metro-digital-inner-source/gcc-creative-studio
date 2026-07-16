@@ -92,7 +92,7 @@ class GroupMember(Base):
         ForeignKey("groups.id"), primary_key=True
     )
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id"), primary_key=True
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     role: Mapped[str] = mapped_column(String, nullable=False)
     joined_at: Mapped[datetime.datetime] = mapped_column(
