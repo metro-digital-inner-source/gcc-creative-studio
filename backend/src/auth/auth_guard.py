@@ -113,42 +113,23 @@ async def get_current_user(
                 ),
             )
 
-        # Check if user is allowed by email or organization
-        is_allowed = False
-
-        if config_service.ALLOWED_EMAILS:
-            if email in config_service.ALLOWED_EMAILS:
-                is_allowed = True
-
-        if not is_allowed and config_service.ALLOWED_ORGS:
-            if normalized_hd and normalized_hd in {
-                org.lower() for org in config_service.ALLOWED_ORGS
-            }:
-                is_allowed = True
-
-        # If at least one restriction is configured and user is not allowed, reject.
-        if (
-            config_service.ALLOWED_EMAILS or config_service.ALLOWED_ORGS
-        ) and not is_allowed:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User is not authorized to access this application.",
-            )
-
-        # Just-In-Time (JIT) User Provisioning:
-        # Create a user profile in our database on their first API call.
-        user_doc = await user_service.create_user_if_not_exists(
-            email=email,
-            name=name,
-            picture=picture,
+        # Strict Allowlist: Only users explicitly added by admin can login.
+        # Check if user exists in database (no auto-creation).
+        user_doc = await user_service.user_repo.get_by_email(
+            email, include_deleted=False
         )
 
         if not user_doc:
+            logger.warning(
+                "Login attempt by unauthorized user: %s. User must be added by admin first.",
+                email,
+            )
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Could not create or retrieve user profile.",
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. Your account has not been provisioned. Please contact an administrator to request access.",
             )
 
+        # Update user profile picture if changed
         if not user_doc.picture and picture:
             logger.info("Updating picture for user: %s", email)
             user_doc.picture = picture
@@ -157,52 +138,7 @@ async def get_current_user(
                     user_doc.id, {"picture": picture}
                 )
 
-        # Ensure admin users have access to the AI Enabler group
-        if UserRoleEnum.ADMIN in user_doc.roles:
-            try:
-                from src.groups.group_service import GroupService
-                from src.groups.repository.group_repository import GroupRepository
-                from src.images.repository.media_item_repository import MediaRepository
-                from src.workspaces.workspace_auth_guard import WorkspaceAuth
-                from src.workspaces.repository.workspace_repository import WorkspaceRepository
-                from src.common.email_service import EmailService
-                
-                # Get database session from existing user_service
-                db_session = user_service.user_repo.db
-                
-                # Manually instantiate all required dependencies
-                group_repo = GroupRepository(db=db_session)
-                workspace_repo = WorkspaceRepository(db=db_session)
-                media_repo = MediaRepository(db=db_session)
-                email_service = EmailService()
-                workspace_auth = WorkspaceAuth()
-                
-                workspace_service = WorkspaceService(
-                    workspace_repo=workspace_repo,
-                    user_repo=user_service.user_repo,
-                    group_repo=group_repo,
-                    email_service=email_service,
-                )
-                
-                group_service = GroupService(
-                    group_repo=group_repo,
-                    workspace_service=workspace_service,
-                    media_repo=media_repo,
-                    workspace_auth=workspace_auth,
-                )
-                
-                await group_service.ensure_admin_access_to_ai_enabler(user_doc)
-                logger.info("Admin user %s granted access to AI Enabler group", email)
-            except Exception as e:
-                logger.error(
-                    "Failed to ensure AI Enabler access for admin %s: %s",
-                    email,
-                    e,
-                    exc_info=True,
-                )
-                # Don't fail auth if AI Enabler provisioning fails
-                pass
-
+        logger.info("User authenticated successfully: %s (ID: %s)", email, user_doc.id)
         return user_doc
 
     except auth.ExpiredIdTokenError as exc:
