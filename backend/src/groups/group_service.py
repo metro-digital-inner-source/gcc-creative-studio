@@ -73,15 +73,29 @@ class GroupService:
 
         The creator is automatically added as an admin member.
         """
-        # 1. Create a dedicated workspace for the group
-        workspace_dto = CreateWorkspaceDto(
-            name=f"{create_request.name} Workspace",
-            scope=WorkspaceScopeEnum.GLOBAL,  # Groups use GLOBAL workspaces (shared with all members)
+        # 1. Find or create a dedicated workspace for the group
+        workspace_name = f"{create_request.name} Workspace"
+        workspace = await self.workspace_service.workspace_repo.find_by_name(
+            workspace_name
         )
-        workspace = await self.workspace_service.create_workspace(
-            user=creator,
-            create_dto=workspace_dto,
-        )
+        
+        if not workspace:
+            # Workspace doesn't exist, create it
+            workspace_dto = CreateWorkspaceDto(
+                name=workspace_name,
+                scope=WorkspaceScopeEnum.GLOBAL,  # Groups use GLOBAL workspaces (shared with all members)
+            )
+            workspace = await self.workspace_service.create_workspace(
+                user=creator,
+                create_dto=workspace_dto,
+            )
+            self.logger.info(
+                f"Created new workspace '{workspace_name}' (ID: {workspace.id}) for group"
+            )
+        else:
+            self.logger.info(
+                f"Reusing existing workspace '{workspace_name}' (ID: {workspace.id}) for group"
+            )
 
         # 2. Create the group with the workspace ID
         group = await self.group_repo.create_group(
@@ -121,14 +135,30 @@ class GroupService:
         if not ai_enabler:
             # Create the AI Enabler group if it doesn't exist
             # Use admin user as the creator/owner
-            workspace_dto = CreateWorkspaceDto(
-                name="AI Enabler Workspace",
-                scope=WorkspaceScopeEnum.GLOBAL,  # Groups use GLOBAL workspaces (shared with all members)
+            
+            # Find or create the AI Enabler workspace
+            workspace_name = "AI Enabler Workspace"
+            workspace = await self.workspace_service.workspace_repo.find_by_name(
+                workspace_name
             )
-            workspace = await self.workspace_service.create_workspace(
-                user=admin_user,
-                create_dto=workspace_dto,
-            )
+            
+            if not workspace:
+                # Workspace doesn't exist, create it
+                workspace_dto = CreateWorkspaceDto(
+                    name=workspace_name,
+                    scope=WorkspaceScopeEnum.GLOBAL,  # Groups use GLOBAL workspaces (shared with all members)
+                )
+                workspace = await self.workspace_service.create_workspace(
+                    user=admin_user,
+                    create_dto=workspace_dto,
+                )
+                self.logger.info(
+                    f"Created new workspace '{workspace_name}' (ID: {workspace.id}) for AI Enabler group"
+                )
+            else:
+                self.logger.info(
+                    f"Reusing existing workspace '{workspace_name}' (ID: {workspace.id}) for AI Enabler group"
+                )
 
             ai_enabler = await self.group_repo.create_group(
                 name="AI Enabler",
