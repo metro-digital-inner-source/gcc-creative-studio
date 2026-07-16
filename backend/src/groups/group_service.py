@@ -76,7 +76,7 @@ class GroupService:
         # 1. Create a dedicated workspace for the group
         workspace_dto = CreateWorkspaceDto(
             name=f"{create_request.name} Workspace",
-            scope=WorkspaceScopeEnum.PRIVATE,  # Groups use private workspaces
+            scope=WorkspaceScopeEnum.GLOBAL,  # Groups use GLOBAL workspaces (shared with all members)
         )
         workspace = await self.workspace_service.create_workspace(
             user=creator,

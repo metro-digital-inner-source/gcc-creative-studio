@@ -288,6 +288,15 @@ async def test_add_user_to_group_by_email_existing_or_restored(status):
 
 @pytest.mark.asyncio
 async def test_add_user_to_group_by_email_conflict_propagates():
+    """Test that 409 CONFLICT is handled gracefully when user already in group.
+    
+    When add_member_to_group raises 409, the method should:
+    1. Catch the 409
+    2. Fetch the group directly to continue provisioning
+    3. Ensure workspace provisioning continues without raising
+    """
+    import datetime
+    
     mock_group_service = MagicMock()
     mock_user_service = MagicMock()
     mock_admin_repo = MagicMock()
@@ -305,6 +314,14 @@ async def test_add_user_to_group_by_email_conflict_propagates():
         roles=[UserRoleEnum.ADMIN],
         name="Owner",
     )
+    
+    group = GroupModel(
+        id=3,
+        name="Test Group",
+        shared_workspace_id=10,
+        created_at=datetime.datetime.now(),
+        updated_at=datetime.datetime.now(),
+    )
 
     mock_user_service.create_or_restore_user_by_email_for_admin = AsyncMock(
         return_value=(provisioned_user, "existing")
@@ -315,6 +332,18 @@ async def test_add_user_to_group_by_email_conflict_propagates():
             detail="User is already a member of this group.",
         )
     )
+    mock_group_service.group_repo = MagicMock()
+    mock_group_service.group_repo.get_by_id_with_members = AsyncMock(
+        return_value=group
+    )
+    
+    # Mock workspace service methods to be non-blocking
+    mock_workspace_service.workspace_repo = MagicMock()
+    mock_workspace_service.workspace_repo.is_member = AsyncMock(return_value=True)
+    mock_workspace_service.workspace_repo.find_by_name = AsyncMock(return_value=None)
+    mock_workspace_service.create_workspace = AsyncMock(
+        return_value=MagicMock(id=11, name="duplicate@example.com")
+    )
 
     service = AdminService(
         admin_repo=mock_admin_repo,
@@ -323,13 +352,18 @@ async def test_add_user_to_group_by_email_conflict_propagates():
         workspace_service=mock_workspace_service,
     )
 
-    with pytest.raises(HTTPException) as exc_info:
-        await service.add_user_to_group_by_email(
-            group_id=3,
-            email="duplicate@example.com",
-            role="member",
-            admin_user=admin_user,
-        )
+    # Should NOT raise exception despite 409
+    response = await service.add_user_to_group_by_email(
+        group_id=3,
+        email="duplicate@example.com",
+        role="member",
+        admin_user=admin_user,
+    )
 
-    assert exc_info.value.status_code == 409
-    assert "already a member" in exc_info.value.detail
+    # Verify the method completed successfully
+    assert response.user_id == 12
+    assert response.email == "duplicate@example.com"
+    assert response.group.id == 3
+    
+    # Verify group was fetched after 409
+    mock_group_service.group_repo.get_by_id_with_members.assert_called_once_with(3)

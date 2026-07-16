@@ -188,34 +188,37 @@ class WorkspaceService:
     ) -> list[WorkspaceModel]:
         """Returns workspaces for the switcher UI contract.
 
-        The switcher should only show private workspaces accessible by the
-        current user and should exclude group-shared workspaces.
+        Returns:
+        - Personal PRIVATE workspaces (user's own)
+        - GLOBAL workspaces (group-shared):
+          - For admins: ALL GLOBAL workspaces in the system
+          - For non-admins: only GLOBAL where user is a member
         """
         is_system_admin = UserRoleEnum.ADMIN in user.roles
 
+        # 1. Get personal PRIVATE workspaces (user's own)
         if is_system_admin:
-            private_workspaces = await self.workspace_repo.find_all_private(
+            personal_workspaces = await self.workspace_repo.find_all_private(
                 limit=1000,
                 offset=0,
             )
         else:
-            private_workspaces = (
+            personal_workspaces = (
                 await self.workspace_repo.find_private_by_member_id(user.id)
             )
 
-        shared_workspace_ids = (
-            await self.group_repo.get_all_shared_workspace_ids()
-        )
-        personal_workspaces = [
-            workspace
-            for workspace in private_workspaces
-            if workspace.id not in shared_workspace_ids
-        ]
-
-        # Also include GLOBAL (group-shared) workspaces the user is a member of
-        global_workspaces = (
-            await self.workspace_repo.find_global_by_member_id(user.id)
-        )
+        # 2. Get GLOBAL workspaces
+        if is_system_admin:
+            # Admins see all GLOBAL workspaces
+            global_workspaces = await self.workspace_repo.find_all_global(
+                limit=1000,
+                offset=0,
+            )
+        else:
+            # Non-admins see only GLOBAL workspaces they're a member of
+            global_workspaces = (
+                await self.workspace_repo.find_global_by_member_id(user.id)
+            )
 
         return personal_workspaces + global_workspaces
 

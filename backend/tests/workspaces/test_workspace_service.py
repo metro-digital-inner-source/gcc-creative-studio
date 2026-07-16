@@ -268,18 +268,16 @@ class TestListSwitcherWorkspacesForUser:
         mock_group_repo,
         mock_user,
     ):
-        w1 = WorkspaceModel(id=1, name="Private A", owner_id=mock_user.id)
-        w2 = WorkspaceModel(id=2, name="Private B", owner_id=mock_user.id)
+        w1 = WorkspaceModel(id=1, name="Personal", owner_id=mock_user.id)
         w_global = WorkspaceModel(id=3, name="AI Enabler", owner_id=99)
-        mock_workspace_repo.find_private_by_member_id.return_value = [w1, w2]
-        mock_group_repo.get_all_shared_workspace_ids.return_value = {2}
+        mock_workspace_repo.find_private_by_member_id.return_value = [w1]
         mock_workspace_repo.find_global_by_member_id.return_value = [w_global]
 
         result = await workspace_service.list_switcher_workspaces_for_user(
             mock_user
         )
 
-        # w2 excluded (in shared_ids), w1 (personal PRIVATE) + w_global (GLOBAL) returned
+        # Non-admin sees: personal PRIVATE + GLOBAL where member
         assert len(result) == 2
         assert result[0].id == 1
         assert result[1].id == 3
@@ -305,22 +303,26 @@ class TestListSwitcherWorkspacesForUser:
             roles=["admin"],
             name="Admin",
         )
-        w1 = WorkspaceModel(id=10, name="Private Admin", owner_id=99)
-        w2 = WorkspaceModel(id=11, name="Group Shared", owner_id=3)
-        w_global = WorkspaceModel(id=12, name="AI Enabler", owner_id=99)
-        mock_workspace_repo.find_all_private.return_value = [w1, w2]
-        mock_group_repo.get_all_shared_workspace_ids.return_value = {11}
-        mock_workspace_repo.find_global_by_member_id.return_value = [w_global]
+        w_personal = WorkspaceModel(id=10, name="admin@example.com", owner_id=99)
+        w_global1 = WorkspaceModel(id=11, name="AI Enabler", owner_id=99)
+        w_global2 = WorkspaceModel(id=12, name="Design Team", owner_id=3)
+        mock_workspace_repo.find_all_private.return_value = [w_personal]
+        mock_workspace_repo.find_all_global.return_value = [w_global1, w_global2]
 
         result = await workspace_service.list_switcher_workspaces_for_user(
             admin_user
         )
 
-        # w2 excluded (in shared_ids), w1 (personal) + w_global (GLOBAL) returned
-        assert len(result) == 2
-        assert result[0].id == 10
-        assert result[1].id == 12
+        # Admin sees: all PRIVATE + ALL GLOBAL (full visibility)
+        assert len(result) == 3
+        assert result[0].id == 10  # personal PRIVATE
+        assert result[1].id == 11  # GLOBAL 1
+        assert result[2].id == 12  # GLOBAL 2
         mock_workspace_repo.find_all_private.assert_called_once_with(
+            limit=1000,
+            offset=0,
+        )
+        mock_workspace_repo.find_all_global.assert_called_once_with(
             limit=1000,
             offset=0,
         )

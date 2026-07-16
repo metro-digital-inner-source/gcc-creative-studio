@@ -14,7 +14,7 @@
 
 import logging
 from datetime import datetime, timedelta
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 
 from src.admin.repository.admin_repository import AdminRepository
 from src.admin.dto.admin_response_dto import (
@@ -155,101 +155,95 @@ class AdminService:
         admin_user: UserModel,
     ) -> AddUserByEmailResponse:
         """Creates/gets a user by email, assigns them to a group as MEMBER,
-        and creates/links workspaces for them.
+        and ensures they have access to the group's shared workspace + personal workspace.
         
-        Implements hybrid model:
-        1. Gets/creates GROUP SHARED workspace (GLOBAL scope, visible to all group members)
-        2. Creates USER PRIVATE workspace (PRIVATE scope, visible only to user)
-        3. Adds user to both workspaces
-        
-        Each group member gets access to one shared workspace and their own private workspace.
+        Flow:
+        1. Create/restore user
+        2. Add user to group (handles if already a member)
+        3. Ensure user is in group's shared GLOBAL workspace (group.shared_workspace_id)
+        4. Ensure user has personal PRIVATE workspace (email-named)
         """
         # Step 1: Create/restore user
         user, provisioning_status = (
             await self.user_service.create_or_restore_user_by_email_for_admin(email)
         )
 
-        # Step 2: Add user to group as MEMBER
-        group = await self.group_service.add_member_to_group(
-            group_id,
-            user.id,
-            GroupMemberRoleEnum.MEMBER,
-            admin_user,
-        )
-
-        # Step 3: Get or create SHARED workspace for the group
-        shared_ws_name = group.name  # e.g., "AI Enabler"
-        
+        # Step 2: Add user to group (idempotent — handles duplicate membership)
         try:
-            # Check if shared workspace already exists for this group
-            existing_shared_ws = await self.workspace_service.check_workspace_name_exists(
-                shared_ws_name
+            group = await self.group_service.add_member_to_group(
+                group_id,
+                user.id,
+                GroupMemberRoleEnum.MEMBER,
+                admin_user,
             )
-            
-            if existing_shared_ws:
-                # Workspace with this name already exists, find it
-                shared_workspace = await self.workspace_service.workspace_repo.find_by_name(
-                    shared_ws_name
-                )
+        except HTTPException as e:
+            if e.status_code == 409:
+                # User already in group — fetch group and continue workspace provisioning
+                self.logger.info(f"User {email} already in group {group_id}, continuing provisioning")
+                group = await self.group_service.group_repo.get_by_id_with_members(group_id)
+                if not group:
+                    raise HTTPException(status_code=404, detail="Group not found.")
             else:
-                # Create new shared workspace for the group
-                shared_dto = CreateWorkspaceDto(name=shared_ws_name, scope=WorkspaceScopeEnum.GLOBAL)
-                shared_workspace = await self.workspace_service.create_workspace(
-                    admin_user,  # Group admin as creator/owner
-                    shared_dto,
-                )
-                self.logger.info(
-                    f"Created shared workspace '{shared_ws_name}' "
-                    f"(ID: {shared_workspace.id}) for group {group_id}"
-                )
-            
-            # Add user to shared workspace if not already a member
-            is_member_shared = await self.workspace_service.workspace_repo.is_member(
-                shared_workspace.id, user.id
+                raise
+
+        # Step 3: Ensure user is a member of the group's shared GLOBAL workspace
+        # (add_member_to_group should have done this, but we verify)
+        try:
+            is_member = await self.workspace_service.workspace_repo.is_member(
+                group.shared_workspace_id, user.id
             )
-            if not is_member_shared:
+            if not is_member:
                 member = WorkspaceMember(
                     user_id=user.id,
                     email=user.email,
                     role=WorkspaceRoleEnum.MEMBER,
                 )
                 await self.workspace_service.workspace_repo.add_member_to_workspace(
-                    shared_workspace.id, member, user.id
+                    group.shared_workspace_id, member, user.id
                 )
                 self.logger.info(
-                    f"Added user {email} to shared workspace {shared_workspace.id}"
+                    f"Added user {email} to group shared workspace {group.shared_workspace_id}"
                 )
-            
-            # Step 4: Create PRIVATE workspace for user (or use existing if already created)
-            private_ws_name = email
-            existing_private_ws = await self.workspace_service.check_workspace_name_exists(
-                private_ws_name
-            )
-            
-            if existing_private_ws:
-                # User's private workspace already exists
-                private_workspace = await self.workspace_service.workspace_repo.find_by_name(
-                    private_ws_name
-                )
-            else:
-                # Create new private workspace for the user
-                private_dto = CreateWorkspaceDto(name=private_ws_name)
-                private_workspace = await self.workspace_service.create_workspace(
-                    user,  # User is owner of their private workspace
-                    private_dto,
-                )
-                self.logger.info(
-                    f"Created private workspace '{private_ws_name}' "
-                    f"(ID: {private_workspace.id}) for user {email}"
-                )
-            
         except Exception as e:
             self.logger.error(
-                f"Failed to create/link workspaces for user {email} in group {group_id}: {e}",
+                f"Failed to add user {email} to group shared workspace: {e}",
                 exc_info=True,
             )
-            # Non-blocking: user added to group successfully, workspace linking failed
-            # This allows the user to be provisioned even if workspace setup has issues
+
+        # Step 4: Ensure user has personal PRIVATE workspace
+        # Use email as the workspace name (unique per user)
+        try:
+            personal_ws_name = email
+            # Check if personal workspace exists by name
+            personal_workspace = await self.workspace_service.workspace_repo.find_by_name(
+                personal_ws_name
+            )
+            
+            if not personal_workspace:
+                # Create new personal PRIVATE workspace
+                personal_dto = CreateWorkspaceDto(
+                    name=personal_ws_name,
+                    scope=WorkspaceScopeEnum.PRIVATE,
+                )
+                personal_workspace = await self.workspace_service.create_workspace(
+                    user,  # User is owner of their personal workspace
+                    personal_dto,
+                )
+                self.logger.info(
+                    f"Created personal workspace '{personal_ws_name}' "
+                    f"(ID: {personal_workspace.id}) for user {email}"
+                )
+            else:
+                self.logger.info(
+                    f"Personal workspace '{personal_ws_name}' already exists "
+                    f"(ID: {personal_workspace.id})"
+                )
+        except Exception as e:
+            self.logger.error(
+                f"Failed to create/get personal workspace for user {email}: {e}",
+                exc_info=True,
+            )
+            # Non-blocking: user provisioning continues even if workspace creation fails
             pass
 
         return AddUserByEmailResponse(
