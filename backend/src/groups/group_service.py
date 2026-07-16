@@ -123,7 +123,7 @@ class GroupService:
             # Use admin user as the creator/owner
             workspace_dto = CreateWorkspaceDto(
                 name="AI Enabler Workspace",
-                scope=WorkspaceScopeEnum.PRIVATE,
+                scope=WorkspaceScopeEnum.GLOBAL,  # Groups use GLOBAL workspaces (shared with all members)
             )
             workspace = await self.workspace_service.create_workspace(
                 user=admin_user,
