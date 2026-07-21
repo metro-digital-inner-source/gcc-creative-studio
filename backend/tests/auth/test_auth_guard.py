@@ -26,13 +26,14 @@ from src.users.user_model import UserModel, UserRoleEnum
 @pytest.fixture(name="mock_user_service")
 def fixture_mock_user_service():
     service = AsyncMock()
-    # Mock create_user_if_not_exists to return a user
-    service.create_user_if_not_exists.return_value = UserModel(
+    # Mock user_repo.get_by_email to return a user (strict allowlist model)
+    mock_user = UserModel(
         id=1,
         email="test@example.com",
         roles=["user"],
         name="Test User",
     )
+    service.user_repo.get_by_email = AsyncMock(return_value=mock_user)
     return service
 
 
@@ -46,7 +47,7 @@ def fixture_mock_request():
 
 
 class TestGetCurrentUser:
-    """Tests for get_current_user dependency."""
+    """Tests for get_current_user dependency (strict allowlist model)."""
 
     @pytest.mark.anyio
     @patch("src.auth.auth_guard.auth.verify_id_token")
@@ -55,7 +56,6 @@ class TestGetCurrentUser:
     ):
         # Setup: Local environment
         config_service.ENVIRONMENT = "local"
-        config_service.ALLOWED_ORGS_STR = ""
 
         # Mock token verification
         mock_verify.return_value = {
@@ -73,10 +73,8 @@ class TestGetCurrentUser:
 
         assert user.email == "test@example.com"
         assert user.name == "Test User"
-        mock_user_service.create_user_if_not_exists.assert_called_once_with(
-            email="test@example.com",
-            name="Test User",
-            picture="http://example.com/pic.jpg",
+        mock_user_service.user_repo.get_by_email.assert_called_once_with(
+            "test@example.com", include_deleted=False
         )
 
     @pytest.mark.anyio
@@ -99,17 +97,20 @@ class TestGetCurrentUser:
 
     @pytest.mark.anyio
     @patch("src.auth.auth_guard.auth.verify_id_token")
-    async def test_get_current_user_allowed_orgs_fail(
+    async def test_get_current_user_not_provisioned(
         self, mock_verify, mock_user_service, mock_request
     ):
+        """User not in database gets 403 - must be added by admin first."""
         config_service.ENVIRONMENT = "local"
-        config_service.ALLOWED_ORGS_STR = "allowed.com"
 
         mock_verify.return_value = {
-            "email": "test@example.com",
-            "name": "Test User",
-            "hd": "forbidden.com",
+            "email": "unknown@example.com",
+            "name": "Unknown User",
+            "hd": "example.com",
         }
+
+        # User not found in database
+        mock_user_service.user_repo.get_by_email = AsyncMock(return_value=None)
 
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(
@@ -118,20 +119,16 @@ class TestGetCurrentUser:
                 user_service=mock_user_service,
             )
 
-        assert exc_info.value.status_code == 401
-        assert (
-            "User is not authorized to access this application."
-            in exc_info.value.detail
-        )
+        assert exc_info.value.status_code == 403
+        assert "Access denied" in exc_info.value.detail
+        assert "not been provisioned" in exc_info.value.detail
 
     @pytest.mark.anyio
     @patch("src.auth.auth_guard.auth.verify_id_token")
-    async def test_get_current_user_allowed_email_case_insensitive(
+    async def test_get_current_user_case_insensitive_email(
         self, mock_verify, mock_user_service, mock_request
     ):
         config_service.ENVIRONMENT = "local"
-        config_service.ALLOWED_ORGS_STR = ""
-        config_service.ALLOWED_EMAILS_STR = "user@example.com"
 
         mock_verify.return_value = {
             "email": " User@Example.com ",
@@ -146,10 +143,8 @@ class TestGetCurrentUser:
         )
 
         assert user.email == "test@example.com"
-        mock_user_service.create_user_if_not_exists.assert_called_once_with(
-            email="user@example.com",
-            name="Case User",
-            picture="",
+        mock_user_service.user_repo.get_by_email.assert_called_once_with(
+            "user@example.com", include_deleted=False
         )
 
 

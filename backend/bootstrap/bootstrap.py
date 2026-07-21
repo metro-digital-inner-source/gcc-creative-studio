@@ -259,51 +259,80 @@ async def ensure_bootstrap_admin_workspaces(
 
 
 async def ensure_admin_user_exists(db: AsyncSession) -> UserModel | None:
-    """Ensures a user document exists for the admin running the script.
-    Returns the admin user model.
+    """Ensures user documents exist for all admin owner emails.
+
+    Returns the primary admin user model configured via ADMIN_USER_EMAIL or
+    the first ADMIN_OWNER_EMAILS entry when ADMIN_USER_EMAIL is 'system'.
     """
-    logger.info("--- Ensuring Admin User Exists ---")
-    admin_email = resolve_bootstrap_admin_email()
-    if not admin_email:
+    logger.info("--- Ensuring Admin Users Exist ---")
+    primary_admin_email = resolve_bootstrap_admin_email()
+
+    admin_emails = set()
+    if config_service.ADMIN_OWNER_EMAILS:
+        admin_emails.update(
+            email.strip().lower()
+            for email in config_service.ADMIN_OWNER_EMAILS
+            if email.strip()
+        )
+    if primary_admin_email:
+        admin_emails.add(primary_admin_email)
+
+    if not admin_emails:
+        logger.info("No admin user emails configured. Skipping admin user creation.")
         return None
 
-    try:
-        logger.info(f"Looking up user for email: {admin_email}")
-        user_repo = UserRepository(db)
-        # Use the dedicated repository method to find the user by email
-        existing_user = await user_repo.get_by_email(admin_email)
+    user_repo = UserRepository(db)
+    primary_user = None
 
-        if existing_user:
-            logger.info(
-                f"User document for '{admin_email}' already exists. ID: {existing_user.id}",
+    for email_to_create in sorted(admin_emails):
+        try:
+            logger.info(f"Looking up user for email: {email_to_create}")
+            existing_user = await user_repo.get_by_email(email_to_create)
+
+            if existing_user:
+                logger.info(
+                    f"User document for '{email_to_create}' already exists. ID: {existing_user.id}",
+                )
+                if (
+                    UserRoleEnum.ADMIN not in existing_user.roles
+                    and UserRoleEnum.ADMIN.value not in existing_user.roles
+                ):
+                    updated_roles = list(existing_user.roles)
+                    updated_roles.append(UserRoleEnum.ADMIN)
+                    existing_user = await user_repo.update(
+                        existing_user.id, {"roles": updated_roles}
+                    )
+                if email_to_create == primary_admin_email:
+                    primary_user = existing_user
+                continue
+
+            logger.warning(
+                f"No user document found for email '{email_to_create}'. Creating one.",
             )
-            return existing_user
-        logger.warning(
-            f"No user document found for email '{admin_email}'. Creating one.",
-        )
-        name = admin_email.split("@")[0]
-        logger.info(f"Setting user's default name to '{name}'.")
+            name = email_to_create.split("@")[0]
+            logger.info(f"Setting user's default name to '{name}'.")
 
-        # Use UserCreateDto or dict for creation
-        new_user_dto = UserCreateDto(
-            email=admin_email,
-            name=name,
-        )
-        user_data = new_user_dto.model_dump()
-        user_data["roles"] = [UserRoleEnum.USER, UserRoleEnum.ADMIN]
+            new_user_dto = UserCreateDto(
+                email=email_to_create,
+                name=name,
+            )
+            user_data = new_user_dto.model_dump()
+            user_data["roles"] = [UserRoleEnum.USER, UserRoleEnum.ADMIN]
 
-        created_user = await user_repo.create(user_data)
-        logger.info(
-            f"Successfully created admin user document for '{admin_email}'. ID: {created_user.id}",
-        )
-        return created_user
+            created_user = await user_repo.create(user_data)
+            logger.info(
+                f"Successfully created admin user document for '{email_to_create}'. ID: {created_user.id}",
+            )
+            if email_to_create == primary_admin_email:
+                primary_user = created_user
 
-    except Exception as e:
-        logger.error(
-            f"Failed to create or verify admin user for '{admin_email}': {e}",
-            exc_info=True,
-        )
-        return None
+        except Exception as e:
+            logger.error(
+                f"Failed to create or verify admin user for '{email_to_create}': {e}",
+                exc_info=True,
+            )
+
+    return primary_user
 
 
 async def ensure_default_workspace_exists(

@@ -27,8 +27,25 @@ steps:
     args:
       - '-c'
       - |
+        # Resolve backend URL:
+        # - If _BACKEND_URL is empty, fetch from Cloud Run.
+        # - If _BACKEND_URL points to Firebase Hosting (.web.app), prefer direct Cloud Run
+        #   to avoid dependency on Hosting rewrites for API traffic.
+        BACKEND_URL="${_BACKEND_URL}"
+        if [ -z "$$BACKEND_URL" ] || [[ "$$BACKEND_URL" == *".web.app"* ]]; then
+          if [ -z "$$BACKEND_URL" ]; then
+            echo "No _BACKEND_URL provided, fetching from Cloud Run..."
+          else
+            echo "_BACKEND_URL points to Hosting ($$BACKEND_URL); fetching direct Cloud Run URL..."
+          fi
+          BACKEND_URL=$(gcloud run services describe ${_BACKEND_SERVICE_ID} \
+            --region=${_BACKEND_REGION} \
+            --format='value(status.url)')
+        fi
+        echo "Resolved backend URL: $$BACKEND_URL"
+
         # Inject into Angular app (environment.prod.ts)
-        sed -i "s|BACKEND_URL_PLACEHOLDER|$${_BACKEND_URL}/api|g" src/environments/environment.prod.ts
+        sed -i "s|BACKEND_URL_PLACEHOLDER|$$BACKEND_URL/api|g" src/environments/environment.prod.ts
         sed -i "s|GOOGLE_CLIENT_ID_PLACEHOLDER|$${GOOGLE_CLIENT_ID}|g" src/environments/environment.prod.ts
         # Inject Firebase config
         sed -i "s|FIREBASE_API_KEY_PLACEHOLDER|$${FIREBASE_API_KEY}|g" src/environments/environment.prod.ts
@@ -108,3 +125,12 @@ availableSecrets:
 
 options:
   logging: CLOUD_LOGGING_ONLY
+  substitutionOption: ALLOW_LOOSE
+
+# Override via Cloud Build trigger substitutions from Terraform per environment.
+substitutions:
+  _FIREBASE_SITE_ID: ''
+  _BACKEND_SERVICE_ID: ''
+  _BACKEND_REGION: ''
+  _BACKEND_URL: ''
+  _FE_SERVICE_NAME: ''

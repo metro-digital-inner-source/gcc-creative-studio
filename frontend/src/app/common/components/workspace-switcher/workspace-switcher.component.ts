@@ -31,6 +31,7 @@ import {UserModel, UserRolesEnum} from '../../models/user.model';
 import {Workspace, WorkspaceScope} from '../../models/workspace.model';
 import {BrandGuidelineService} from '../../services/brand-guideline/brand-guideline.service';
 import {UserService} from '../../services/user.service';
+import {environment} from '../../../../environments/environment';
 import {
   BrandGuidelineDialogComponent,
   BrandGuidelineDialogData,
@@ -305,5 +306,10 @@ export class WorkspaceSwitcherComponent implements OnInit {
         '_blank',
       );
     }
+  }
+
+  getBackendUrl(): string {
+    const backendUrl = localStorage.getItem('backend_url') || environment.backendURL.replace(/\/api$/, '');
+    return backendUrl;
   }
 }

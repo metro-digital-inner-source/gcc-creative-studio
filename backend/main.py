@@ -64,8 +64,11 @@ from src.groups.group_controller import router as group_router
 
 def configure_cors(app):
     """Configures CORS middleware based on the environment."""
+    import json
+
     environment = getenv("ENVIRONMENT")
     allowed_origins = []
+    is_strict = False
 
     if environment == "production":
         frontend_url = getenv("FRONTEND_URL")
@@ -74,17 +77,36 @@ def configure_cors(app):
                 "FRONTEND_URL environment variable not set in production"
             )
         allowed_origins.append(frontend_url)
+        is_strict = True
+    elif environment in ["pre-production", "pp"]:
+        # Use CORS_ORIGINS env var if provided by Terraform, otherwise use FRONTEND_URL
+        cors_origins_str = getenv("CORS_ORIGINS")
+        if cors_origins_str:
+            try:
+                parsed = json.loads(cors_origins_str)
+                if isinstance(parsed, list):
+                    allowed_origins.extend(parsed)
+                else:
+                    allowed_origins.append(str(parsed))
+            except json.JSONDecodeError:
+                allowed_origins.append(cors_origins_str)
+        frontend_url = getenv("FRONTEND_URL")
+        if frontend_url and frontend_url not in allowed_origins:
+            allowed_origins.append(frontend_url)
+        # Also allow localhost for local development against preprod backend
+        allowed_origins.append("http://localhost:4200")
+        is_strict = True
     elif environment in ["development", "test", "local"]:
         allowed_origins.append("*")  # Allow all origins in development
     else:
         raise ValueError(
-            f"Invalid ENVIRONMENT: {environment}. Must be 'production', 'development' or 'local'",
+            f"Invalid ENVIRONMENT: {environment}. Must be 'production', 'pre-production', 'pp', 'development', 'test', or 'local'",
         )
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
-        allow_credentials=environment == "production",
+        allow_credentials=is_strict,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -107,14 +129,28 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize Firebase: {e}")
 
-    # Run Database Migrations
+    # Run Database Migrations and Bootstrap Data
     try:
         from src.database_migrations import run_pending_migrations
-
         await run_pending_migrations()
+
+        logger.info("Running automatic database bootstrapping...")
+        from bootstrap.bootstrap import (
+            ensure_admin_user_exists,
+            ensure_default_workspace_exists,
+            seed_vto_assets,
+            seed_media_templates,
+        )
+        from src.database import async_session_local
+        async with async_session_local() as db:
+            admin_user = await ensure_admin_user_exists(db)
+            await ensure_default_workspace_exists(db, admin_user)
+            await seed_vto_assets(db, admin_user)
+            await seed_media_templates(db, admin_user)
+        logger.info("Database bootstrap completed successfully.")
     except Exception as e:
-        logger.error(f"Failed to run database migrations: {e}")
-        # We might want to stop startup here if migrations fail
+        logger.error(f"Failed to run database migrations/bootstrap: {e}")
+        # We might want to stop startup here if migrations/bootstrap fail
         raise e
 
     logger.info("Creating ThreadPoolExecutor...")
