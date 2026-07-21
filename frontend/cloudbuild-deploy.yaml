@@ -28,16 +28,11 @@ steps:
       - '-c'
       - |
         # Resolve backend URL:
-        # - If _BACKEND_URL is empty, fetch from Cloud Run.
-        # - If _BACKEND_URL points to Firebase Hosting (.web.app), prefer direct Cloud Run
-        #   to avoid dependency on Hosting rewrites for API traffic.
+        # - Prefer _BACKEND_URL from Terraform (Firebase Hosting URL for same-origin /api calls).
+        # - Fall back to direct Cloud Run only when _BACKEND_URL is not set.
         BACKEND_URL="${_BACKEND_URL}"
-        if [ -z "$$BACKEND_URL" ] || [[ "$$BACKEND_URL" == *".web.app"* ]]; then
-          if [ -z "$$BACKEND_URL" ]; then
-            echo "No _BACKEND_URL provided, fetching from Cloud Run..."
-          else
-            echo "_BACKEND_URL points to Hosting ($$BACKEND_URL); fetching direct Cloud Run URL..."
-          fi
+        if [ -z "$$BACKEND_URL" ]; then
+          echo "No _BACKEND_URL provided, fetching from Cloud Run..."
           BACKEND_URL=$(gcloud run services describe ${_BACKEND_SERVICE_ID} \
             --region=${_BACKEND_REGION} \
             --format='value(status.url)')
