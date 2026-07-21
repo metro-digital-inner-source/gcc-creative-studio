@@ -63,6 +63,9 @@ backend_secrets = [
 # (Cloud Run rejects duplicate env names).
 backend_runtime_secrets = {}
 
+be_cpu    = "2000m"
+be_memory = "2048Mi"
+
 apis_to_enable = [
   "serviceusage.googleapis.com",     # Required to enable other APIs
   "iam.googleapis.com",              # Required for IAM management
