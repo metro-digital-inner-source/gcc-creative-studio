@@ -48,6 +48,8 @@ def fixture_mock_migrations():
     ), patch(
         "bootstrap.bootstrap.ensure_default_workspace_exists", AsyncMock()
     ), patch(
+        "bootstrap.bootstrap.ensure_bootstrap_admin_workspaces", AsyncMock()
+    ), patch(
         "bootstrap.bootstrap.seed_vto_assets", AsyncMock()
     ), patch(
         "bootstrap.bootstrap.seed_media_templates", AsyncMock()

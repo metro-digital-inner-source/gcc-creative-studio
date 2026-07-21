@@ -58,19 +58,19 @@ jobs:
             echo "environment=prod" >> $GITHUB_OUTPUT
             echo "secret-suffix=PROD" >> $GITHUB_OUTPUT
             echo "gcp-project=cf-genaistudi-genai-studio--7u" >> $GITHUB_OUTPUT
-            echo "tfvars-file=prod/prod.tfvars" >> $GITHUB_OUTPUT
+            echo "tfvars-file=prod.tfvars" >> $GITHUB_OUTPUT
             echo "branch-name=main" >> $GITHUB_OUTPUT
           elif [[ "${{ github.base_ref }}" == "test" || "${{ github.ref }}" == "refs/heads/test" ]]; then
             echo "environment=pp" >> $GITHUB_OUTPUT
             echo "secret-suffix=PP" >> $GITHUB_OUTPUT
             echo "gcp-project=cf-genaistudi-genai-studio--vm" >> $GITHUB_OUTPUT
-            echo "tfvars-file=pp/pp.tfvars" >> $GITHUB_OUTPUT
+            echo "tfvars-file=pp.tfvars" >> $GITHUB_OUTPUT
             echo "branch-name=test" >> $GITHUB_OUTPUT
           elif [[ "${{ github.base_ref }}" == "develop" || "${{ github.ref }}" == "refs/heads/develop" ]]; then
             echo "environment=dev" >> $GITHUB_OUTPUT
             echo "secret-suffix=DEV" >> $GITHUB_OUTPUT
             echo "gcp-project=cf-genaistudi-genai-studio--gv" >> $GITHUB_OUTPUT
-            echo "tfvars-file=dev/dev.tfvars" >> $GITHUB_OUTPUT
+            echo "tfvars-file=dev.tfvars" >> $GITHUB_OUTPUT
             echo "branch-name=develop" >> $GITHUB_OUTPUT
           else
             echo "Unknown branch. Cannot determine environment."
