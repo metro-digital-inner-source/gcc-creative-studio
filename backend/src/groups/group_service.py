@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from datetime import date
 
 from fastapi import Depends, HTTPException, status
@@ -59,6 +60,7 @@ class GroupService:
         self.workspace_service = workspace_service
         self.media_repo = media_repo
         self.workspace_auth = workspace_auth
+        self.logger = logging.getLogger(__name__)
 
     async def get_user_groups(self, user_id: int) -> list[GroupModel]:
         """Gets all groups for a user."""

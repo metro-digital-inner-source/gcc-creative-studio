@@ -50,14 +50,23 @@ from src.source_assets.schema.source_asset_model import (
     AssetTypeEnum as AssetType,
 )
 from src.source_assets.schema.source_asset_model import SourceAssetModel
+from src.common.email_service import EmailService
+from src.groups.group_service import GroupService
+from src.groups.repository.group_repository import GroupRepository
+from src.images.repository.media_item_repository import MediaRepository
 from src.users.dto.user_create_dto import UserCreateDto
 from src.users.repository.user_repository import UserRepository
 from src.users.user_model import UserModel, UserRoleEnum
+from src.workspaces.dto.create_workspace_dto import CreateWorkspaceDto
 from src.workspaces.repository.workspace_repository import WorkspaceRepository
 from src.workspaces.schema.workspace_model import (
+    WorkspaceMember,
     WorkspaceModel,
+    WorkspaceRoleEnum,
     WorkspaceScopeEnum,
 )
+from src.workspaces.workspace_auth_guard import WorkspaceAuth
+from src.workspaces.workspace_service import WorkspaceService
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +75,187 @@ logger = logging.getLogger(__name__)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def get_admin_email() -> str:
-    return config_service.ADMIN_USER_EMAIL
+def resolve_bootstrap_admin_email() -> str | None:
+    """Resolves the email used to seed the first platform admin.
+
+    Priority:
+    1. ADMIN_USER_EMAIL when set to a real user (bootstrap.sh sets gcloud account)
+    2. First ADMIN_OWNER_EMAILS entry when ADMIN_USER_EMAIL is 'system'
+    """
+    admin_email = (config_service.ADMIN_USER_EMAIL or "").strip().lower()
+    if admin_email and admin_email != "system":
+        return admin_email
+
+    owner_emails = sorted(
+        email.strip().lower()
+        for email in config_service.ADMIN_OWNER_EMAILS
+        if email.strip()
+    )
+    if owner_emails:
+        logger.info(
+            "Bootstrap running as 'system'. Using owner email: %s",
+            owner_emails[0],
+        )
+        return owner_emails[0]
+
+    logger.warning(
+        "No bootstrap admin email configured. Set ADMIN_USER_EMAIL or ADMIN_OWNER_EMAILS."
+    )
+    return None
+
+
+def _has_admin_role(roles: list[UserRoleEnum | str]) -> bool:
+    return any(
+        (role.value if isinstance(role, UserRoleEnum) else str(role)).lower()
+        == UserRoleEnum.ADMIN.value
+        for role in roles
+    )
+
+
+def build_group_service(db: AsyncSession) -> GroupService:
+    """Constructs GroupService outside FastAPI dependency injection."""
+    workspace_repo = WorkspaceRepository(db)
+    user_repo = UserRepository(db)
+    group_repo = GroupRepository(db)
+    workspace_service = WorkspaceService(
+        workspace_repo=workspace_repo,
+        user_repo=user_repo,
+        group_repo=group_repo,
+        email_service=EmailService(),
+    )
+    return GroupService(
+        group_repo=group_repo,
+        workspace_service=workspace_service,
+        media_repo=MediaRepository(db),
+        workspace_auth=WorkspaceAuth(workspace_repo=workspace_repo),
+    )
+
+
+def build_workspace_service(db: AsyncSession) -> WorkspaceService:
+    """Constructs WorkspaceService outside FastAPI dependency injection."""
+    workspace_repo = WorkspaceRepository(db)
+    return WorkspaceService(
+        workspace_repo=workspace_repo,
+        user_repo=UserRepository(db),
+        group_repo=GroupRepository(db),
+        email_service=EmailService(),
+    )
+
+
+async def ensure_admin_user_has_admin_role(
+    db: AsyncSession,
+    admin_user: UserModel,
+) -> UserModel:
+    """Ensures the bootstrap admin retains the platform admin role."""
+    if _has_admin_role(admin_user.roles):
+        return admin_user
+
+    user_repo = UserRepository(db)
+    updated_roles = [
+        role.value if isinstance(role, UserRoleEnum) else str(role)
+        for role in admin_user.roles
+    ]
+    updated_roles.append(UserRoleEnum.ADMIN.value)
+    logger.info(
+        "Promoting bootstrap admin '%s' to platform admin role.",
+        admin_user.email,
+    )
+    return await user_repo.update(admin_user.id, {"roles": updated_roles})
+
+
+async def ensure_personal_private_workspace(
+    db: AsyncSession,
+    admin_user: UserModel,
+) -> None:
+    """Ensures the bootstrap admin has an email-named private workspace."""
+    workspace_service = build_workspace_service(db)
+    personal_ws_name = admin_user.email.strip().lower()
+    personal_workspace = await workspace_service.workspace_repo.find_by_name(
+        personal_ws_name
+    )
+
+    if not personal_workspace:
+        personal_dto = CreateWorkspaceDto(
+            name=personal_ws_name,
+            scope=WorkspaceScopeEnum.PRIVATE,
+        )
+        personal_workspace = await workspace_service.create_workspace(
+            admin_user,
+            personal_dto,
+        )
+        logger.info(
+            "Created personal workspace '%s' (ID: %s) for bootstrap admin.",
+            personal_ws_name,
+            personal_workspace.id,
+        )
+        return
+
+    is_member = await workspace_service.workspace_repo.is_member(
+        personal_workspace.id,
+        admin_user.id,
+    )
+    if is_member:
+        logger.info(
+            "Bootstrap admin already has personal workspace '%s'.",
+            personal_ws_name,
+        )
+        return
+
+    member_role = (
+        WorkspaceRoleEnum.OWNER
+        if personal_workspace.owner_id == admin_user.id
+        else WorkspaceRoleEnum.EDITOR
+    )
+    logger.info(
+        "Adding bootstrap admin to existing personal workspace '%s'.",
+        personal_ws_name,
+    )
+    await workspace_service.workspace_repo.add_member_to_workspace(
+        personal_workspace.id,
+        WorkspaceMember(
+            user_id=admin_user.id,
+            email=admin_user.email,
+            role=member_role,
+        ),
+        admin_user.id,
+    )
+
+
+async def ensure_bootstrap_admin_workspaces(
+    db: AsyncSession,
+    admin_user: UserModel | None,
+) -> None:
+    """Provisions group + workspace access for the bootstrap admin.
+
+    Mirrors admin UI provisioning so first login works on a fresh database
+    without JIT auth or manual SQL.
+    """
+    if not admin_user:
+        logger.warning(
+            "Skipping bootstrap admin workspace provisioning: no admin user."
+        )
+        return
+
+    logger.info("--- Ensuring Bootstrap Admin Workspaces ---")
+    admin_user = await ensure_admin_user_has_admin_role(db, admin_user)
+    group_service = build_group_service(db)
+
+    try:
+        group = await group_service.ensure_admin_access_to_ai_enabler(admin_user)
+        if group:
+            logger.info(
+                "Bootstrap admin provisioned for AI Enabler group (ID: %s).",
+                group.id,
+            )
+    except Exception as exc:
+        logger.error(
+            "Failed to provision AI Enabler access for bootstrap admin: %s",
+            exc,
+            exc_info=True,
+        )
+        raise
+
+    await ensure_personal_private_workspace(db, admin_user)
 
 
 async def ensure_admin_user_exists(db: AsyncSession) -> UserModel | None:
@@ -75,12 +263,8 @@ async def ensure_admin_user_exists(db: AsyncSession) -> UserModel | None:
     Returns the admin user model.
     """
     logger.info("--- Ensuring Admin User Exists ---")
-    admin_email = get_admin_email()
-
-    if admin_email == "system":
-        logger.info(
-            "Bootstrap running as 'system'. Skipping admin user creation."
-        )
+    admin_email = resolve_bootstrap_admin_email()
+    if not admin_email:
         return None
 
     try:
@@ -468,6 +652,7 @@ async def main():
         async with async_session_local() as db:
             admin_user = await ensure_admin_user_exists(db)
             await ensure_default_workspace_exists(db, admin_user)
+            await ensure_bootstrap_admin_workspaces(db, admin_user)
             await seed_vto_assets(db, admin_user)
             await seed_media_templates(db, admin_user)
     finally:
