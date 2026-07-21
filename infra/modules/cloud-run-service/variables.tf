@@ -129,3 +129,9 @@ variable "db_secret_id" {
 }
 variable "db_name" { type = string }
 variable "db_user" { type = string }
+
+variable "invoker_iam_disabled" {
+  type        = bool
+  description = "Disable Cloud Run invoker IAM check so Firebase Hosting and browsers can reach the service. App-level JWT auth still applies."
+  default     = false
+}

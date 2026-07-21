@@ -118,6 +118,9 @@ module "backend_service" {
   source_repository_id = google_cloudbuildv2_repository.source_repo.id
   cpu = var.be_cpu
   memory = var.be_memory
+  # Allow Firebase Hosting /api rewrites and browser calls without per-user run.invoker.
+  # Security is enforced by app JWT auth + DB allowlist, not Cloud Run IAM.
+  invoker_iam_disabled  = true
   build_substitutions   = merge(var.be_build_substitutions,
     {
       _REGION = var.gcp_region

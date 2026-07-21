@@ -32,10 +32,11 @@ resource "google_artifact_registry_repository" "repo" {
 }
 
 resource "google_cloud_run_v2_service" "this" {
-  name             = var.service_name
-  location         = var.gcp_region
-  custom_audiences = var.custom_audiences
-  deletion_protection = false
+  name                  = var.service_name
+  location              = var.gcp_region
+  custom_audiences      = var.custom_audiences
+  deletion_protection   = false
+  invoker_iam_disabled  = var.invoker_iam_disabled
 
   template {
     service_account = google_service_account.run_sa.email
