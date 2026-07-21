@@ -195,13 +195,13 @@ resource "google_cloud_run_v2_service_iam_member" "fe_trigger_can_view_backend" 
   member   = "serviceAccount:${module.frontend_service.trigger_sa_email}"
 }
 
-# Allow Firebase Hosting rewrite proxy to invoke backend /api/** routes.
-# Without this, Hosting rewrites can return 503 even when backend is healthy.
-resource "google_cloud_run_v2_service_iam_member" "firebase_hosting_can_invoke_backend" {
+# Allow Firebase (Hosting rewrites / Firebase-managed calls) to invoke backend /api/** routes.
+# Uses the project Firebase service agent (same pattern as dev manual IAM setup).
+resource "google_cloud_run_v2_service_iam_member" "firebase_can_invoke_backend" {
   provider = google-beta
   project  = var.gcp_project_id
   name     = module.backend_service.service_name
   location = module.backend_service.location
   role     = "roles/run.invoker"
-  member   = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-firebasehosting.iam.gserviceaccount.com"
+  member   = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-firebase.iam.gserviceaccount.com"
 }
