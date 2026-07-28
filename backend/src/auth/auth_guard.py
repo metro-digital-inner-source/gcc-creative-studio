@@ -11,17 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Authentication guards and user retrieval."""
-
+"""Authentication guards and user retrieval via IAP (or local bypass)."""
 
 import asyncio
 import logging
+from urllib.parse import unquote
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from firebase_admin import auth
-
-# --- Google Auth for Identity Platform ---
+from fastapi import Depends, HTTPException, Request, status
 from google.auth.transport import requests as google_auth_requests
 from google.oauth2 import id_token
 
@@ -29,67 +25,83 @@ from src.config.config_service import config_service
 from src.users.user_model import UserModel, UserRoleEnum
 from src.users.user_service import UserService
 
-# Initialize the service once to be used by dependencies.
-# user_service = UserService()  <-- REMOVED
-
-# This scheme will require the client to send a token in the Authorization
-# header. It tells FastAPI how to find the token but doesn't validate it
-# itself.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-
 logger = logging.getLogger(__name__)
+
+IAP_CERTS_URL = "https://www.gstatic.com/iap/verify/public_key"
+
+
+def _parse_iap_email_header(header_value: str) -> str:
+    """Parse `accounts.google.com:user@example.com` into an email."""
+    if not header_value:
+        return ""
+    decoded = unquote(header_value)
+    if ":" in decoded:
+        return decoded.split(":", 1)[1].strip().lower()
+    return decoded.strip().lower()
+
+
+def _verify_iap_jwt(iap_jwt: str) -> dict:
+    """Verify an IAP-signed JWT and return claims."""
+    audience = config_service.IAP_AUDIENCE or config_service.GOOGLE_TOKEN_AUDIENCE
+    if not audience:
+        raise ValueError(
+            "IAP_AUDIENCE (or GOOGLE_TOKEN_AUDIENCE) is not configured."
+        )
+    return id_token.verify_token(
+        iap_jwt,
+        google_auth_requests.Request(),
+        audience=audience,
+        certs_url=IAP_CERTS_URL,
+    )
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    request: Request,
     user_service: UserService = Depends(UserService),
 ) -> UserModel:
-    """Dependency that handles the entire authentication and user
-    provisioning flow.
-
-    1. Verifies the Firebase ID token.
-    2. Extracts user information (id, email).
-    3. Checks if a user document exists in Firestore.
-    4. If the user is new, creates their document ("Just-In-Time Provisioning").
-    5. Returns a Pydantic model with the user's data.
-    """
+    """Authenticate via IAP JWT (deployed) or local identity header."""
     try:
-        decoded_token = {}
+        email = ""
+        name = ""
+        picture = ""
+        token_info_hd = None
+
         if config_service.ENVIRONMENT == "local":
-            # --- Local: Use Firebase Auth ---
-            # Verifies the token using the standard Firebase Admin SDK method.
-            logger.info("Verifying token using Firebase Admin SDK...")
-            decoded_token = await asyncio.to_thread(auth.verify_id_token, token)
-        else:
-            # --- Development/Production: Use Google Identity Platform
-            # (OIDC) ---
-            # Verifies the Google-issued OIDC ID token. The audience must be the
-            # OAuth 2.0 client ID of the Identity Platform-protected resource.
-            google_token_audience = config_service.GOOGLE_TOKEN_AUDIENCE
-            decoded_token = await asyncio.to_thread(
-                id_token.verify_oauth2_token,
-                token,
-                google_auth_requests.Request(),
-                audience=google_token_audience,
+            email = _parse_iap_email_header(
+                request.headers.get("X-Goog-Authenticated-User-Email", "")
             )
+            if not email:
+                email = (config_service.LOCAL_USER_EMAIL or "").strip().lower()
+            name_header = request.headers.get(
+                "X-Goog-Authenticated-User-Name", ""
+            )
+            name = unquote(name_header) if name_header else email.split("@")[0]
+            if "@" in email:
+                token_info_hd = email.split("@", 1)[1]
+        else:
+            iap_jwt = request.headers.get("X-Goog-IAP-JWT-Assertion")
+            if not iap_jwt:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Missing IAP credentials.",
+                )
+            decoded_token = await asyncio.to_thread(_verify_iap_jwt, iap_jwt)
+            email = (decoded_token.get("email") or "").strip().lower()
+            name = decoded_token.get("name") or email.split("@")[0]
+            picture = decoded_token.get("picture", "")
+            token_info_hd = decoded_token.get("hd")
+            if not token_info_hd and "@" in email:
+                token_info_hd = email.split("@", 1)[1]
 
-        email = decoded_token.get("email")
-        name = decoded_token.get("name")
-        picture = decoded_token.get("picture", "")
-        token_info_hd = decoded_token.get("hd")
-
-        # Restrict by particular organizations if it's a closed environment
         if not email:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
                     "Forbidden: User identity could not be confirmed from "
-                    "token."
+                    "IAP credentials."
                 ),
             )
 
-        # If ALLOWED_ORGS is configured, check the user's organization.
         if config_service.ALLOWED_ORGS:
             if (
                 not token_info_hd
@@ -103,8 +115,6 @@ async def get_current_user(
                     ),
                 )
 
-        # Just-In-Time (JIT) User Provisioning:
-        # Create a user profile in our database on their first API call.
         user_doc = await user_service.create_user_if_not_exists(
             email=email,
             name=name,
@@ -127,36 +137,17 @@ async def get_current_user(
 
         return user_doc
 
-    except auth.ExpiredIdTokenError as exc:
-        logger.error(
-            "[get_current_user - auth.ExpiredIdTokenError] for %s", email
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication token has expired.",
-        ) from exc
-    except auth.InvalidIdTokenError as e:
-        logger.error(
-            "[get_current_user - auth.InvalidIdTokenError] for %s: %s",
-            email,
-            e,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid authentication token: {e}",
-        ) from e
-    except HTTPException as e:
-        logger.error("[get_current_user - Exception]: %s", e)
-        raise e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("[get_current_user - Exception]: %s", e)
         raise HTTPException(
             status_code=getattr(
                 e,
                 "status_code",
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status.HTTP_401_UNAUTHORIZED,
             ),
-            detail=f"An unexpected error occurred during authentication: {e}",
+            detail=f"Authentication failed: {e}",
         ) from e
 
 

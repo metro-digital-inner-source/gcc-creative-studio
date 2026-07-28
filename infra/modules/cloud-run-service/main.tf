@@ -31,12 +31,34 @@ resource "google_artifact_registry_repository" "repo" {
   format        = "DOCKER"
 }
 
+# Grant secret access BEFORE updating Cloud Run (Cloud Run rejects the
+# revision if the runtime SA cannot read mounted secrets).
+resource "google_secret_manager_secret_iam_member" "db_password_access" {
+  project   = var.gcp_project_id
+  secret_id = var.db_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.run_sa.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "runtime_secret_access" {
+  for_each = var.runtime_secrets
+
+  project   = var.gcp_project_id
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.run_sa.email}"
+}
+
 resource "google_cloud_run_v2_service" "this" {
-  name             = var.service_name
-  location         = var.gcp_region
-  custom_audiences = var.custom_audiences
+  name                = var.service_name
+  location            = var.gcp_region
+  custom_audiences    = var.custom_audiences
   deletion_protection = false
 
+  depends_on = [
+    google_secret_manager_secret_iam_member.db_password_access,
+    google_secret_manager_secret_iam_member.runtime_secret_access,
+  ]
   template {
     service_account = google_service_account.run_sa.email
     volumes {
@@ -183,21 +205,9 @@ resource "google_project_iam_member" "storage_object_admin_binding" {
   member  = "serviceAccount:${google_service_account.run_sa.email}"
 }
 
-resource "google_project_iam_member" "firestore_developer_binding" {
-  project = var.gcp_project_id
-  role    = "roles/firebase.developAdmin"
-  member  = "serviceAccount:${google_service_account.run_sa.email}"
-}
-
 resource "google_project_iam_member" "sa_token_creator_binding" {
   project = var.gcp_project_id
   role    = "roles/iam.serviceAccountTokenCreator"
-  member  = "serviceAccount:${google_service_account.run_sa.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "db_password_access" {
-  secret_id = var.db_secret_id
-  role      = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${google_service_account.run_sa.email}"
 }
 

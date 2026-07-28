@@ -12,8 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+output "url" {
+  description = "The URL of the deployed frontend Cloud Run service."
+  value       = google_cloud_run_v2_service.this.uri
+}
+
 output "service_url" {
-  description = "The URL of the deployed Cloud Run service."
+  description = "Alias for url for compatibility."
   value       = google_cloud_run_v2_service.this.uri
 }
 
@@ -33,6 +38,11 @@ output "location" {
 }
 
 output "run_sa_email" {
-  description = "The email of the Cloud Run runtime service account."
+  description = "Runtime service account for the frontend."
   value       = google_service_account.run_sa.email
+}
+
+output "iap_enabled" {
+  description = "Whether IAP is enabled on the frontend Cloud Run service."
+  value       = var.iap_enabled
 }

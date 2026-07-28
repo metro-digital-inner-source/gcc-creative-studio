@@ -47,8 +47,12 @@ class ConfigService(BaseSettings):
     LOG_LEVEL: str = "INFO"
     INIT_VERTEX: bool = True
 
-    # --- Google Identity ---
+    # --- Google Identity / IAP ---
     GOOGLE_TOKEN_AUDIENCE: str = ""
+    # Expected audience claim on X-Goog-IAP-JWT-Assertion. Falls back to
+    # GOOGLE_TOKEN_AUDIENCE when empty.
+    IAP_AUDIENCE: str = ""
+    LOCAL_USER_EMAIL: str = "dev@example.com"
     ALLOWED_ORGS_STR: str = Field(
         default="", alias="IDENTITY_PLATFORM_ALLOWED_ORGS"
     )

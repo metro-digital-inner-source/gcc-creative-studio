@@ -19,7 +19,7 @@ variable "environment" { type = string }
 
 variable "firebase_site_id" {
   type        = string
-  description = "The site ID for the Firebase Hosting site. Must be unique across all Firebase projects."
+  description = "Deprecated. Frontend is deployed to Cloud Run; kept for tfvars compatibility."
   default     = ""
 }
 
@@ -62,12 +62,12 @@ variable "be_memory" {
 
 variable "fe_cpu" {
   type = string
-  default = "2000m"
+  default = "1000m"
 }
 
 variable "fe_memory" {
   type = string
-  default = "2048Mi"
+  default = "512Mi"
 }
 
 variable "frontend_secrets" {
@@ -86,4 +86,16 @@ variable "backend_runtime_secrets" {
   type        = map(string)
   description = "Secrets to mount in the backend container at runtime."
   default     = {}
+}
+
+variable "iap_enabled" {
+  type        = bool
+  description = "Enable IAP on the frontend Cloud Run service."
+  default     = true
+}
+
+variable "iap_access_members" {
+  type        = list(string)
+  description = "Principals granted IAP access to the frontend (group:/user:/domain:)."
+  default     = []
 }

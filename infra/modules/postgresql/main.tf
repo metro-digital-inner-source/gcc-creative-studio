@@ -18,25 +18,41 @@ resource "random_id" "db_name_suffix" {
 
 resource "google_sql_database_instance" "default" {
   name             = "creative-studio-db-${random_id.db_name_suffix.hex}"
-  database_version = "POSTGRES_18" # Latest stable version
+  database_version = "POSTGRES_18"
   region           = var.region
   project          = var.project_id
 
   settings {
     tier = "db-perf-optimized-N-2"
-    
-    # Enable IAM Authentication for better security (optional but recommended)
+
+    # Required by organization custom constraints on this project.
     database_flags {
       name  = "cloudsql.iam_authentication"
       value = "on"
     }
+    database_flags {
+      name  = "log_connections"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_disconnections"
+      value = "on"
+    }
+
+    password_validation_policy {
+      enable_password_policy      = true
+      min_length                  = 21
+      complexity                  = "COMPLEXITY_DEFAULT"
+      reuse_interval              = 5
+      disallow_username_substring = true
+    }
 
     ip_configuration {
-      ipv4_enabled = true # Easy connectivity from Cloud Run without VPC peering complexity
+      ipv4_enabled = true
     }
   }
-  
-  deletion_protection = false # Set to true for production
+
+  deletion_protection = false
 }
 
 resource "google_sql_database" "default" {

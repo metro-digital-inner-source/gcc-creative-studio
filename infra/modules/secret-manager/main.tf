@@ -12,23 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# 1. Create the "shell" for each secret in the list
+# 1. Create the "shell" for each secret in the list.
+# Org policy constraints/gcp.resourceLocations often forbids replication { auto {} }
+# (global). Use user-managed replication in an allowed region.
 resource "google_secret_manager_secret" "this" {
   provider = google-beta
-  for_each = toset(var.secret_names) # Loop over the list of names
+  for_each = toset(var.secret_names)
 
   project   = var.gcp_project_id
-  secret_id = each.key # Use the name from the list as the secret_id
+  secret_id = each.key
 
   replication {
-    auto {}
+    user_managed {
+      replicas {
+        location = var.replication_location
+      }
+    }
   }
 }
 
 # 2. Grant the accessor role for each secret to the specified service account
 resource "google_secret_manager_secret_iam_member" "accessor" {
   provider = google-beta
-  for_each = toset(var.secret_names) # Loop over the same list
+  for_each = toset(var.secret_names)
 
   project   = google_secret_manager_secret.this[each.key].project
   secret_id = google_secret_manager_secret.this[each.key].secret_id

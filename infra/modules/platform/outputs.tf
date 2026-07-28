@@ -24,6 +24,16 @@ output "frontend_service_url" {
   value       = module.frontend_service.url
 }
 
+output "backend_host" {
+  description = "Backend Cloud Run hostname used by frontend nginx /api proxy."
+  value       = "${var.backend_service_name}-${data.google_project.project.number}.${var.gcp_region}.run.app"
+}
+
+output "iap_access_members" {
+  description = "Principals granted IAP access on the frontend."
+  value       = var.iap_access_members
+}
+
 output "cloud_sql_connection_name" {
   description = "The connection name of the Cloud SQL instance to be used by the bootstrap script."
   value       = module.postgresql.connection_name

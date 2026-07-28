@@ -23,7 +23,7 @@ import {
   HttpErrorResponse,
 } from '@angular/common/http';
 import {Observable, throwError} from 'rxjs';
-import {catchError, switchMap} from 'rxjs/operators';
+import {catchError} from 'rxjs/operators';
 import {AuthService} from './common/services/auth.service';
 import {environment} from '../environments/environment';
 
@@ -35,29 +35,25 @@ export class AuthInterceptor implements HttpInterceptor {
     request: HttpRequest<unknown>,
     next: HttpHandler,
   ): Observable<HttpEvent<unknown>> {
-    // Asynchronously get a valid token. This will use the cache or trigger a silent refresh.
-    return this.authService.getValidIdentityPlatformToken$().pipe(
-      switchMap(token => {
-        // Token was retrieved successfully. Clone the request and add the auth header.
-        const authorizedRequest = request.clone({
-          setHeaders: {Authorization: `Bearer ${token}`},
+    let outbound = request;
+
+    // Deployed: IAP JWT is attached by Google in front of Cloud Run and
+    // forwarded by nginx. Local: send a synthetic IAP email header.
+    if (environment.isLocal) {
+      const emailHeader = this.authService.getLocalUserEmailHeader();
+      if (emailHeader) {
+        outbound = request.clone({
+          setHeaders: {'X-Goog-Authenticated-User-Email': emailHeader},
         });
-        return next.handle(authorizedRequest);
-      }),
-      catchError(error => {
-        // If the error is NOT an HttpErrorResponse, it's a token refresh failure
-        // from our AuthService. In this case, the session is invalid, and we should log out.
-        if (!(error instanceof HttpErrorResponse)) {
-          console.error(
-            'AuthInterceptor: Session expired and could not be refreshed. Logging out.',
-            error,
-          );
+      }
+    }
+
+    return next.handle(outbound).pipe(
+      catchError((error: HttpErrorResponse) => {
+        if (error.status === 401) {
+          console.error('AuthInterceptor: unauthorized. Logging out.', error);
           void this.authService.logout();
         }
-
-        // Otherwise, it's a backend API error (e.g., 404, 500). We should NOT log out.
-        // We just re-throw the original HttpErrorResponse so the calling service
-        // (e.g., UserService) can handle it and display an appropriate error message.
         return throwError(() => error);
       }),
     );

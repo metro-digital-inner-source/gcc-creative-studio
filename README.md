@@ -118,7 +118,7 @@ The backend follows a **Modular, Feature-Driven Architecture**, heavily inspired
 | **Backend**        | Python, FastAPI, Pydantic                                |
 | **Database**       | Google Cloud SQL (PostgreSQL)                            |
 | **Cloud Provider** | Google Cloud Platform (GCP)                              |
-| **Deployment**     | Cloud Run (for backend), Firebase Hosting (for frontend) |
+| **Deployment**     | Cloud Run (frontend + backend), Identity-Aware Proxy (IAP) for login |
 | **AI Models**      | Imagen, Veo, Gemini (via Vertex AI SDK)                  |
 
 ### Dependencies
@@ -135,7 +135,6 @@ Regarding the dependencies of the APIs and Services we’ll use (the Google APIs
 - `cloudbuild.googleapis.com` (Cloud Build)
 - `cloudfunctions.googleapis.com` (Cloud Functions)
 - `compute.googleapis.com` (Compute Engine)
-- `firebase.googleapis.com` (Firebase)
 - `sqladmin.googleapis.com` (Cloud SQL)
 - `iamcredentials.googleapis.com` (IAM Service API)
 - `iap.googleapis.com` (Cloud Identity-Aware Proxy)
@@ -149,7 +148,6 @@ For the deployment you can use CloudShell which already has all of the necessary
 - `gcloud` (Google Cloud SDK)
 - `git`
 - `jq` (JSON processor)
-- `firebase-tools` (Firebase CLI)
 - `uv` (Python package installer)
 - `terraform` (version 1.13.0 or newer)
 

@@ -4,8 +4,7 @@ environment    = "development"
 
 # --- Service Names ---
 backend_service_name  = "cstudio-backend-dev"
-frontend_service_name = "cstudio-frontend-dev" # This is the Cloud Run service name
-firebase_site_id      = "YOUR_FIREBASE_SITE_ID" # (Optional) Custom Firebase Hosting Site ID, defaults to the gcp_project_id
+frontend_service_name = "cstudio-frontend-dev"
 
 # --- GitHub Repo Details ---
 github_conn_name   = "gh-repo-owner-con"
@@ -14,8 +13,10 @@ github_repo_name   = "repo-owner-gcc-creative-studio"
 github_branch_name = "develop"
 
 # --- Custom Audiences ---
-backend_custom_audiences  = ["YOUR_OAUTH_WEB_CLIENT_ID_HERE", "YOUR_GCP_PROJECT_ID"]
-frontend_custom_audiences = ["YOUR_OAUTH_WEB_CLIENT_ID_HERE", "YOUR_GCP_PROJECT_ID"]
+# Still used by Cloud Run custom_audiences where configured; IAP JWT audience
+# is supplied via the IAP_AUDIENCE secret (see backend_runtime_secrets).
+backend_custom_audiences  = ["YOUR_IAP_OAUTH_CLIENT_ID_HERE", "YOUR_GCP_PROJECT_ID"]
+frontend_custom_audiences = ["YOUR_IAP_OAUTH_CLIENT_ID_HERE", "YOUR_GCP_PROJECT_ID"]
 
 # --- Service-Specific Environment Variables ---
 be_env_vars = {
@@ -24,12 +25,10 @@ be_env_vars = {
   }
   development = {
     ENVIRONMENT  = "development"
-    GOOGLE_TOKEN_AUDIENCE = "YOUR_OAUTH_WEB_CLIENT_ID_HERE"
     IDENTITY_PLATFORM_ALLOWED_ORGS = "" # If empty then any org is allowed
   }
   production = {
     ENVIRONMENT  = "production"
-    GOOGLE_TOKEN_AUDIENCE = "YOUR_OAUTH_WEB_CLIENT_ID_HERE"
     IDENTITY_PLATFORM_ALLOWED_ORGS = "" # If empty then any org is allowed
   }
 }
@@ -38,23 +37,26 @@ fe_build_substitutions = {
   _ANGULAR_BUILD_COMMAND = "build-dev"
 }
 
+# Who can pass the IAP gate. Prefer a Google Group over individual users.
+# Examples: "group:creative-studio-users@metro-gsc.in" or "domain:metro-gsc.in"
+iap_enabled = true
+iap_access_members = [
+  "user:manish.singh@metro-gsc.in",
+  # "group:YOUR_GROUP@metro-gsc.in",
+]
+
 frontend_secrets = [
-  "FIREBASE_API_KEY",          # Your Firebase Web API Key
-  "FIREBASE_AUTH_DOMAIN",      # Your Firebase Auth Domain (e.g., project-id.firebaseapp.com)
-  "FIREBASE_PROJECT_ID",       # Your Firebase Project ID
-  "FIREBASE_STORAGE_BUCKET",   # Your Firebase Storage Bucket (e.g., project-id.appspot.com)
-  "FIREBASE_MESSAGING_SENDER_ID", # Your Firebase Cloud Messaging Sender ID
-  "FIREBASE_APP_ID",           # Your Firebase Web App ID
-  "FIREBASE_MEASUREMENT_ID",   # Your Google Analytics Measurement ID
-  "GOOGLE_CLIENT_ID",          # Your Google OAuth 2.0 Client ID for web
+  "IAP_CLIENT_ID", # IAP OAuth client ID (SPA logout). Populate via bootstrap / gcloud.
 ]
 
 backend_secrets = [
   "GOOGLE_TOKEN_AUDIENCE",
+  "IAP_AUDIENCE",
 ]
 
 backend_runtime_secrets = {
   "GOOGLE_TOKEN_AUDIENCE" = "GOOGLE_TOKEN_AUDIENCE"
+  "IAP_AUDIENCE"          = "IAP_AUDIENCE"
 }
 
 apis_to_enable = [
@@ -65,10 +67,10 @@ apis_to_enable = [
   "run.googleapis.com",              # Required for Cloud Run
   "cloudresourcemanager.googleapis.com",
   "compute.googleapis.com",
-  "cloudfunctions.googleapis.com",
   "iamcredentials.googleapis.com",
   "aiplatform.googleapis.com",
-  "firestore.googleapis.com",
   "texttospeech.googleapis.com",
   "workflows.googleapis.com",
+  "iap.googleapis.com",
+  "identitytoolkit.googleapis.com",
 ]

@@ -26,3 +26,9 @@ variable "accessor_sa_email" {
   type        = string
   description = "The email of the service account that will be granted accessor permission."
 }
+
+variable "replication_location" {
+  type        = string
+  description = "Region for user-managed Secret Manager replication (must satisfy org location policy)."
+  default     = "europe-west3"
+}

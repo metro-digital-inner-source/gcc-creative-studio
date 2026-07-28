@@ -31,3 +31,13 @@ output "cloud_sql_connection_name" {
   description = "The connection name of the Cloud SQL instance to be used by the bootstrap script."
   value       = module.creative_studio_platform.cloud_sql_connection_name
 }
+
+output "frontend_service_url" {
+  description = "Frontend Cloud Run URL (behind IAP)."
+  value       = module.creative_studio_platform.frontend_service_url
+}
+
+output "backend_service_url" {
+  description = "Backend Cloud Run URL."
+  value       = module.creative_studio_platform.backend_service_url
+}

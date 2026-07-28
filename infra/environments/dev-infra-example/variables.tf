@@ -110,6 +110,19 @@ variable "backend_secrets" {
 variable "backend_runtime_secrets" {
   type        = map(string)
   description = "Secrets to mount in the backend container at runtime."
+  default     = {}
+}
+
+variable "iap_enabled" {
+  type        = bool
+  description = "Enable IAP on the frontend Cloud Run service."
+  default     = true
+}
+
+variable "iap_access_members" {
+  type        = list(string)
+  description = "Principals granted IAP access (e.g. [\"group:team@example.com\"])."
+  default     = []
 }
 
 
