@@ -79,7 +79,11 @@ async def get_current_user(
             if "@" in email:
                 token_info_hd = email.split("@", 1)[1]
         else:
-            iap_jwt = request.headers.get("X-Goog-IAP-JWT-Assertion")
+            # Direct IAP → service, or FE proxy (X-CS-IAP-JWT): Cloud Run
+            # strips X-Goog-IAP-* on FE→BE calls, so the proxy rewrites it.
+            iap_jwt = request.headers.get(
+                "X-Goog-IAP-JWT-Assertion"
+            ) or request.headers.get("X-CS-IAP-JWT")
             if not iap_jwt:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,

@@ -98,18 +98,24 @@ class Handler(SimpleHTTPRequestHandler):
             pass
 
         headers = {}
-        # Preserve selected inbound headers; set Cloud Run invoker token.
-        for key in (
-            "Content-Type",
-            "Accept",
-            "X-Goog-IAP-JWT-Assertion",
-            "X-Goog-Authenticated-User-Email",
-            "X-Goog-Authenticated-User-Id",
-            "X-Goog-Authenticated-User-Name",
-        ):
+        for key in ("Content-Type", "Accept"):
             val = self.headers.get(key)
             if val:
                 headers[key] = val
+
+        # Cloud Run strips X-Goog-IAP-* on service-to-service calls, so copy
+        # the user JWT into a custom header the backend will verify.
+        iap_jwt = self.headers.get("X-Goog-IAP-JWT-Assertion")
+        iap_email = self.headers.get("X-Goog-Authenticated-User-Email")
+        if iap_jwt:
+            headers["X-CS-IAP-JWT"] = iap_jwt
+        if iap_email:
+            headers["X-CS-IAP-Email"] = iap_email
+        if not iap_jwt:
+            print(
+                f"[fe-proxy] WARNING: no X-Goog-IAP-JWT-Assertion on "
+                f"{self.command} {self.path} (email_header={'yes' if iap_email else 'no'})"
+            )
 
         try:
             headers["Authorization"] = f"Bearer {_fetch_identity_token()}"
