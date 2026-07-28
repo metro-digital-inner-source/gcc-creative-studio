@@ -80,22 +80,27 @@ export class AuthService {
   }
 
   async logout(route: string = LOGIN_ROUTE) {
+    this.clearLocalSession();
+
+    if (!environment.isLocal && environment.iapClientId) {
+      const continueUrl = encodeURIComponent(window.location.origin);
+      window.location.href =
+        `https://iap.googleapis.com/v1/oauth/clientIds/` +
+        `${environment.iapClientId}:logout?continue=${continueUrl}`;
+      return;
+    }
+
+    void this.router.navigateByUrl(route);
+  }
+
+  /** Clear browser session state without hitting IAP logout. */
+  clearLocalSession(): void {
     if (isPlatformBrowser(this.platformId)) {
       localStorage.removeItem(USER_DETAILS);
       localStorage.removeItem(LOCAL_SESSION_KEY);
       localStorage.removeItem('showTooltip');
     }
     this.localUserEmail = null;
-
-    if (!environment.isLocal && environment.iapClientId) {
-      const continueUrl = encodeURIComponent(window.location.origin);
-      window.location.href =
-        `https://iap.googleapis.com/v1/oauth/client_ids/` +
-        `${environment.iapClientId}:logout?continue=${continueUrl}`;
-      return;
-    }
-
-    void this.router.navigateByUrl(route);
   }
 
   isLoggedIn(): boolean {

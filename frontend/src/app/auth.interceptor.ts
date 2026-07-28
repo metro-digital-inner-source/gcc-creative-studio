@@ -50,9 +50,12 @@ export class AuthInterceptor implements HttpInterceptor {
 
     return next.handle(outbound).pipe(
       catchError((error: HttpErrorResponse) => {
+        // Do not call IAP logout here — a 401 from /api (e.g. backend down
+        // or JWT verify failure) would bounce the user to a broken logout URL.
+        // Clear the local profile and let the login page retry sync.
         if (error.status === 401) {
-          console.error('AuthInterceptor: unauthorized. Logging out.', error);
-          void this.authService.logout();
+          console.error('AuthInterceptor: unauthorized.', error);
+          this.authService.clearLocalSession();
         }
         return throwError(() => error);
       }),
