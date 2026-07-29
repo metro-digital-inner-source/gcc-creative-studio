@@ -98,9 +98,11 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
   fail "Operation cancelled."
 fi
 
-# 4. Attempt to auto-discover IAP OAuth client ID (used for IAP_CLIENT_ID / IAP_AUDIENCE / GOOGLE_TOKEN_AUDIENCE)
-info "Checking for IAP OAuth Client ID..."
+# 4. Attempt to auto-discover IAP OAuth client ID (IAP_CLIENT_ID / logout)
+#    and Cloud Run IAP JWT audience (IAP_AUDIENCE).
+info "Checking for IAP OAuth Client ID and Cloud Run IAP audience..."
 AUTO_OAUTH_CLIENT_ID=""
+AUTO_IAP_AUDIENCE=""
 
 # Prefer value already set in .tfvars audiences / env vars
 AUTO_OAUTH_CLIENT_ID=$(grep -oE '[0-9]+-[a-zA-Z0-9]+\.apps\.googleusercontent\.com' "$TFVARS_FILE" | head -n 1 || true)
@@ -109,12 +111,23 @@ if [ -z "$AUTO_OAUTH_CLIENT_ID" ]; then
   AUTO_OAUTH_CLIENT_ID=$(gcloud iap oauth-clients list "$PROJECT_ID" --format="json" 2>/dev/null | jq -r '.[0].clientId // .[0].name // empty' | awk -F'/' '{print $NF}')
 fi
 
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)' 2>/dev/null || true)
+REGION=$(grep -E '^\s*gcp_region\s*=' "$TFVARS_FILE" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true)
+FE_SERVICE=$(grep -E '^\s*frontend_service_name\s*=' "$TFVARS_FILE" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true)
+REGION=${REGION:-europe-west3}
+FE_SERVICE=${FE_SERVICE:-cstudio-frontend-dev}
+if [ -n "$PROJECT_NUMBER" ]; then
+  AUTO_IAP_AUDIENCE="/projects/${PROJECT_NUMBER}/locations/${REGION}/services/${FE_SERVICE}"
+fi
+
 if [ -n "$AUTO_OAUTH_CLIENT_ID" ] && [ "$AUTO_OAUTH_CLIENT_ID" != "null" ]; then
-  success "Found IAP OAuth Client ID. Will auto-populate IAP_CLIENT_ID / IAP_AUDIENCE / GOOGLE_TOKEN_AUDIENCE."
+  success "Found IAP OAuth Client ID (for IAP_CLIENT_ID)."
 else
   warn "Could not automatically find an IAP OAuth Client ID for project '$PROJECT_ID'."
-  warn "You will be prompted for IAP-related secrets manually."
   AUTO_OAUTH_CLIENT_ID=""
+fi
+if [ -n "$AUTO_IAP_AUDIENCE" ]; then
+  success "Cloud Run IAP audience: ${AUTO_IAP_AUDIENCE}"
 fi
 
 # 5. Loop, Prompt, and Write
@@ -126,14 +139,14 @@ for SECRET_NAME in $ALL_SECRETS; do
   # Check if we have an auto-discovered value for the current secret
   case $SECRET_NAME in
     "IAP_CLIENT_ID")           SECRET_VALUE=$AUTO_OAUTH_CLIENT_ID; AUTO_DISCOVERED=true ;;
-    "IAP_AUDIENCE")            SECRET_VALUE=$AUTO_OAUTH_CLIENT_ID; AUTO_DISCOVERED=true ;;
+    "IAP_AUDIENCE")            SECRET_VALUE=$AUTO_IAP_AUDIENCE; AUTO_DISCOVERED=true ;;
     "GOOGLE_TOKEN_AUDIENCE")   SECRET_VALUE=$AUTO_OAUTH_CLIENT_ID; AUTO_DISCOVERED=true ;;
     "GOOGLE_CLIENT_ID")        SECRET_VALUE=$AUTO_OAUTH_CLIENT_ID; AUTO_DISCOVERED=true ;;
   esac
 
   if [ "$AUTO_DISCOVERED" = true ] && [ -n "$SECRET_VALUE" ] && [ "$SECRET_VALUE" != "null" ]; then
-    info "  Auto-populating from IAP OAuth Client ID."
-  elif [ "$SECRET_NAME" == "IAP_CLIENT_ID" ] || [ "$SECRET_NAME" == "IAP_AUDIENCE" ] || [ "$SECRET_NAME" == "GOOGLE_TOKEN_AUDIENCE" ] || [ "$SECRET_NAME" == "GOOGLE_CLIENT_ID" ]; then
+    info "  Auto-populating ${SECRET_NAME}."
+  elif [ "$SECRET_NAME" == "IAP_CLIENT_ID" ] || [ "$SECRET_NAME" == "GOOGLE_TOKEN_AUDIENCE" ] || [ "$SECRET_NAME" == "GOOGLE_CLIENT_ID" ]; then
     warn "  Could not auto-discover IAP OAuth Client ID."
     info "  Please perform the following manual steps:"
     echo "  1. Open this URL in your browser: ${C_YELLOW}https://console.cloud.google.com/apis/credentials?project=${PROJECT_ID}${C_RESET}"
@@ -142,6 +155,11 @@ for SECRET_NAME in $ALL_SECRETS; do
     echo
     # Reuse for subsequent IAP secrets in this run
     AUTO_OAUTH_CLIENT_ID="$SECRET_VALUE"
+  elif [ "$SECRET_NAME" == "IAP_AUDIENCE" ]; then
+    warn "  Could not build Cloud Run IAP audience automatically."
+    echo "  Expected format: /projects/PROJECT_NUMBER/locations/REGION/services/FRONTEND_SERVICE"
+    read -s -p "  Enter IAP_AUDIENCE: " SECRET_VALUE
+    echo
   else
     # Add reassurance for the user
     echo -e "${C_CYAN}  It is safe to paste your secret. The value is read securely, not displayed, and not stored in disk or history.${C_RESET}"

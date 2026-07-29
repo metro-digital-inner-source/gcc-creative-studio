@@ -36,7 +36,7 @@ BE_SERVICE_NAME="cstudio-be"
 FE_SERVICE_NAME="cstudio-fe"
 
 # script will automatically set these
-AUTO_OAUTH_CLIENT_ID=""            # IAP OAuth Web Client ID (also used as IAP_CLIENT_ID / IAP_AUDIENCE / GOOGLE_TOKEN_AUDIENCE)
+AUTO_OAUTH_CLIENT_ID=""            # IAP OAuth Web Client ID (IAP_CLIENT_ID / logout only)
 
 STATE_FILE=""
 REPO_ROOT=""
@@ -457,11 +457,23 @@ populate_oauth_secrets() {
     fi
 
     info "Populating secrets with Client ID: ${C_YELLOW}${AUTO_OAUTH_CLIENT_ID}${C_RESET}"
-    # IAP_CLIENT_ID: SPA logout; IAP_AUDIENCE / GOOGLE_TOKEN_AUDIENCE: backend JWT verify
+    # IAP_CLIENT_ID: SPA logout URL only.
+    # IAP_AUDIENCE for Cloud Run IAP is the service resource name, NOT the OAuth client ID:
+    #   /projects/PROJECT_NUMBER/locations/REGION/services/FRONTEND_SERVICE
+    # That value is set as a Cloud Run env var by Terraform (platform module).
     echo -n "$AUTO_OAUTH_CLIENT_ID" | gcloud secrets versions add IAP_CLIENT_ID --data-file="-" --project="$GCP_PROJECT_ID" --quiet
-    echo -n "$AUTO_OAUTH_CLIENT_ID" | gcloud secrets versions add IAP_AUDIENCE --data-file="-" --project="$GCP_PROJECT_ID" --quiet
+    # Keep GOOGLE_TOKEN_AUDIENCE as client ID for any legacy GIS checks; IAP verify uses IAP_AUDIENCE env.
     echo -n "$AUTO_OAUTH_CLIENT_ID" | gcloud secrets versions add GOOGLE_TOKEN_AUDIENCE --data-file="-" --project="$GCP_PROJECT_ID" --quiet
-    success "Secrets 'IAP_CLIENT_ID', 'IAP_AUDIENCE', and 'GOOGLE_TOKEN_AUDIENCE' have been populated."
+
+    local PROJECT_NUMBER FE_SERVICE_NAME IAP_AUD REGION
+    PROJECT_NUMBER=$(gcloud projects describe "$GCP_PROJECT_ID" --format='value(projectNumber)')
+    REGION=$(grep 'gcp_region' "$TFVARS_FILE_PATH" | awk -F'"' '{print $2}')
+    REGION=${REGION:-europe-west3}
+    FE_SERVICE_NAME=$(grep -E '^\s*frontend_service_name\s*=' "$TFVARS_FILE_PATH" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true)
+    FE_SERVICE_NAME=${FE_SERVICE_NAME:-cstudio-frontend-dev}
+    IAP_AUD="/projects/${PROJECT_NUMBER}/locations/${REGION}/services/${FE_SERVICE_NAME}"
+    echo -n "$IAP_AUD" | gcloud secrets versions add IAP_AUDIENCE --data-file="-" --project="$GCP_PROJECT_ID" --quiet || true
+    success "Secrets populated. IAP JWT audience (Cloud Run): ${C_YELLOW}${IAP_AUD}${C_RESET}"
 
     info "Updating audiences in $TFVARS_FILE_PATH..."
     sed -i.bak "s|YOUR_IAP_OAUTH_CLIENT_ID_HERE|$AUTO_OAUTH_CLIENT_ID|g" "$TFVARS_FILE_PATH"

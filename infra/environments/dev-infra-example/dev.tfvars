@@ -51,12 +51,12 @@ frontend_secrets = [
 
 backend_secrets = [
   "GOOGLE_TOKEN_AUDIENCE",
-  "IAP_AUDIENCE",
 ]
 
 backend_runtime_secrets = {
   "GOOGLE_TOKEN_AUDIENCE" = "GOOGLE_TOKEN_AUDIENCE"
-  "IAP_AUDIENCE"          = "IAP_AUDIENCE"
+  # IAP_AUDIENCE is set as a plain env var by the platform module
+  # (/projects/NUMBER/locations/REGION/services/FRONTEND_SERVICE).
 }
 
 apis_to_enable = [

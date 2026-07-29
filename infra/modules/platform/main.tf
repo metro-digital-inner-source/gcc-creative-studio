@@ -66,6 +66,9 @@ locals {
       "SIGNING_SA_EMAIL"       = google_service_account.bucket_reader_sa.email
       "BACKEND_URL"            = local.backend_url
       "WORKFLOWS_EXECUTOR_URL" = "${local.backend_url}/api/workflows-executor"
+      # Cloud Run IAP JWT aud (NOT the OAuth client ID). See:
+      # https://cloud.google.com/iap/docs/signed-headers-howto
+      "IAP_AUDIENCE" = "/projects/${data.google_project.project.number}/locations/${var.gcp_region}/services/${var.frontend_service_name}"
     }
   )
 }
