@@ -522,7 +522,7 @@ def test_process_image_in_background_sync_gemini_model(
     from src.common.base_dto import GenerationModelEnum
 
     sample_create_imagen_dto.generation_model = (
-        GenerationModelEnum.GEMINI_3_PRO_IMAGE_PREVIEW
+        GenerationModelEnum.GEMINI_3_PRO_IMAGE
     )
     sample_create_imagen_dto.google_search = False
     sample_create_imagen_dto.resolution = "1024x1024"
@@ -668,7 +668,7 @@ def test_process_image_in_background_sync_gemini_image_to_image(
     from src.common.schema.media_item_model import SourceMediaItemLink
 
     sample_create_imagen_dto.generation_model = (
-        GenerationModelEnum.GEMINI_3_PRO_IMAGE_PREVIEW
+        GenerationModelEnum.GEMINI_3_PRO_IMAGE
     )
     sample_create_imagen_dto.source_media_items = [
         SourceMediaItemLink(
@@ -747,7 +747,7 @@ def test_gemini_generate_image_base64_reconstruct(mock_gcs_service):
         gcs_service=mock_gcs_service,
         vertexai_client=mock_client,
         prompt="Test",
-        model=GenerationModelEnum.GEMINI_3_PRO_IMAGE_PREVIEW,
+        model=GenerationModelEnum.GEMINI_3_PRO_IMAGE,
         bucket_name="bucket",
     )
 

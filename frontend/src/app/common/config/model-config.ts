@@ -51,8 +51,8 @@ export interface GenerationModelConfig {
 export const MODEL_CONFIGS: GenerationModelConfig[] = [
   // --- Image Models ---
   {
-    value: 'gemini-3.1-flash-image-preview',
-    viewValue: 'Nano Banana 2 (Preview)',
+    value: 'gemini-3.1-flash-image',
+    viewValue: 'Nano Banana 2',
     type: 'IMAGE',
     imageSrc: 'assets/images/banana-peel.png',
     isImage: true,
@@ -79,8 +79,8 @@ export const MODEL_CONFIGS: GenerationModelConfig[] = [
     },
   },
   {
-    value: 'gemini-3-pro-image-preview',
-    viewValue: 'Nano Banana Pro (Preview)',
+    value: 'gemini-3-pro-image',
+    viewValue: 'Nano Banana Pro',
     type: 'IMAGE',
     imageSrc: 'assets/images/banana-peel.png',
     isImage: true,
@@ -209,8 +209,8 @@ export const MODEL_CONFIGS: GenerationModelConfig[] = [
     },
   },
   {
-    value: 'gemini-3-pro-preview',
-    viewValue: 'Gemini 3 Pro Preview',
+    value: 'gemini-3.1-pro-preview',
+    viewValue: 'Gemini 3.1 Pro Preview',
     type: 'TEXT',
     icon: 'gemini-spark-icon',
     isSvg: true,
@@ -221,8 +221,8 @@ export const MODEL_CONFIGS: GenerationModelConfig[] = [
     },
   },
   {
-    value: 'gemini-3-flash-preview',
-    viewValue: 'Gemini 3 Flash Preview',
+    value: 'gemini-3.5-flash',
+    viewValue: 'Gemini 3.5 Flash',
     type: 'TEXT',
     icon: 'gemini-spark-icon',
     isSvg: true,
