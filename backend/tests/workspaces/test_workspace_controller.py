@@ -54,6 +54,7 @@ class TestCreateWorkspace:
             owner_id=mock_user.id,
         )
         mock_workspace_service.create_workspace.return_value = mock_workspace
+        mock_workspace_service.check_workspace_name_exists.return_value = False
 
         response = api_client.post(
             "/api/workspaces", json={"name": "My Workspace"}
@@ -63,6 +64,25 @@ class TestCreateWorkspace:
         data = response.json()
         assert data["name"] == "My Workspace"
         assert data["id"] == 1
+
+    def test_create_workspace_duplicate_name_fails(
+        self,
+        api_client,
+        mock_workspace_service,
+        mock_user,
+    ):
+        """Test that creating a workspace with an existing name returns 409 CONFLICT."""
+        mock_workspace_service.check_workspace_name_exists.return_value = True
+
+        response = api_client.post(
+            "/api/workspaces", json={"name": "Existing Workspace"}
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        data = response.json()
+        assert "Workspace name taken" in data["detail"]
+        # Verify create_workspace was NOT called
+        mock_workspace_service.create_workspace.assert_not_called()
 
 
 class TestListMyWorkspaces:
@@ -86,6 +106,28 @@ class TestListMyWorkspaces:
         assert len(data) == 1
         assert data[0]["name"] == "Work 1"
 
+    def test_list_workspace_switcher_workspaces_success(
+        self,
+        api_client,
+        mock_workspace_service,
+        mock_user,
+    ):
+        workspace = WorkspaceModel(
+            id=2,
+            name="Private Switcher",
+            owner_id=mock_user.id,
+        )
+        mock_workspace_service.list_switcher_workspaces_for_user.return_value = [
+            workspace
+        ]
+
+        response = api_client.get("/api/workspaces/switcher")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["name"] == "Private Switcher"
+
 
 class TestInviteUser:
     """Tests for POST /api/workspaces/{id}/invites."""
@@ -98,7 +140,11 @@ class TestInviteUser:
 
         response = api_client.post(
             "/api/workspaces/1/invites",
-            json={"email": "guest@example.com", "role": "viewer"},
+            json={
+                "email": "guest@example.com",
+                "role": "viewer",
+                "groupId": 1,
+            },
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -110,7 +156,11 @@ class TestInviteUser:
 
         response = api_client.post(
             "/api/workspaces/1/invites",
-            json={"email": "unknown@example.com", "role": "viewer"},
+            json={
+                "email": "unknown@example.com",
+                "role": "viewer",
+                "groupId": 1,
+            },
         )
 
         assert response.status_code == status.HTTP_404_NOT_FOUND

@@ -36,10 +36,7 @@ import {
   GalleryItem,
   PaginatedGalleryResponse,
 } from '../common/models/gallery-item.model';
-import {
-  GalleryFiltersState,
-  GallerySearchDto,
-} from '../common/models/search.model';
+import {GallerySearchDto} from '../common/models/search.model';
 import {WorkspaceStateService} from '../services/workspace/workspace-state.service';
 
 @Injectable({
@@ -53,7 +50,6 @@ export class GalleryService implements OnDestroy {
   private pageSize = 40;
   private allFetchedImages: GalleryItem[] = [];
   private filters$ = new BehaviorSubject<GallerySearchDto | null>(null);
-  private uiFiltersState: GalleryFiltersState | null = null;
   private dataLoadingSubscription: Subscription;
 
   constructor(
@@ -255,8 +251,8 @@ export class GalleryService implements OnDestroy {
       status: item.status,
       gcsUris: item.gcsUris,
       thumbnailUris: item.thumbnailUris,
-      presignedUrls: item.presignedUrls,
-      presignedThumbnailUrls: item.presignedThumbnailUrls,
+      presignedUrls: item.presignedUrls || item.presigned_urls || [],
+      presignedThumbnailUrls: item.presignedThumbnailUrls || item.presigned_thumbnail_urls || [],
       metadata: metadata,
       mimeType: metadata.mimeType || metadata.mime_type || item.mimeType,
       aspectRatio:
@@ -378,13 +374,5 @@ export class GalleryService implements OnDestroy {
   restoreMediaItem(id: number, itemType: string): Observable<any> {
     const url = `${environment.backendURL}/gallery/items/${id}/restore?item_type=${itemType}`;
     return this.http.post(url, {});
-  }
-
-  get filtersState(): GalleryFiltersState | null {
-    return this.uiFiltersState;
-  }
-
-  setFiltersState(state: GalleryFiltersState | null): void {
-    this.uiFiltersState = state;
   }
 }

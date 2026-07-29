@@ -37,6 +37,7 @@ from src.brand_guidelines.brand_guideline_controller import (
     router as brand_guideline_router,
 )
 from src.galleries.gallery_controller import router as gallery_router
+from src.groups.group_controller import router as group_router
 from src.generation_options.generation_options_controller import (
     router as generation_options_router,
 )
@@ -95,14 +96,28 @@ async def lifespan(app: FastAPI):
     # --- Startup ---
     logger.info("Starting up application...")
 
-    # Run Database Migrations
+    # Run Database Migrations and Bootstrap Data
     try:
         from src.database_migrations import run_pending_migrations
 
         await run_pending_migrations()
+
+        logger.info("Running automatic database bootstrapping...")
+        from bootstrap.bootstrap import (
+            ensure_admin_user_exists,
+            ensure_bootstrap_admin_workspaces,
+            ensure_default_workspace_exists,
+        )
+        from src.database import async_session_local
+
+        async with async_session_local() as db:
+            admin_user = await ensure_admin_user_exists(db)
+            await ensure_default_workspace_exists(db, admin_user)
+            await ensure_bootstrap_admin_workspaces(db, admin_user)
+        logger.info("Database bootstrap completed successfully.")
     except Exception as e:
-        logger.error(f"Failed to run database migrations: {e}")
-        # We might want to stop startup here if migrations fail
+        logger.error(f"Failed to run database migrations/bootstrap: {e}")
+        # We might want to stop startup here if migrations/bootstrap fail
         raise e
 
     logger.info("Creating ThreadPoolExecutor...")
@@ -168,6 +183,7 @@ app.include_router(media_template_router)
 app.include_router(source_asset_router)
 app.include_router(tags_router)
 app.include_router(workspace_router)
+app.include_router(group_router)
 app.include_router(brand_guideline_router)
 app.include_router(workflow_router)
 app.include_router(workflows_executor_router)

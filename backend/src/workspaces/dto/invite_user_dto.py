@@ -15,6 +15,7 @@
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pydantic.alias_generators import to_camel
 
+from src.groups.schema.group_model import GroupMemberRoleEnum
 from src.workspaces.schema.workspace_model import WorkspaceRoleEnum
 
 
@@ -23,5 +24,9 @@ class InviteUserDto(BaseModel):
 
     email: EmailStr
     role: WorkspaceRoleEnum = Field(default=WorkspaceRoleEnum.VIEWER)
+    group_id: int = Field(
+        ..., description="ID of the group to assign the user to"
+    )
+    group_role: GroupMemberRoleEnum = Field(default=GroupMemberRoleEnum.MEMBER)
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)

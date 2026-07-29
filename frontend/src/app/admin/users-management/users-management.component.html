@@ -17,24 +17,50 @@
 <div class="p-4">
   <div class="flex justify-between items-center mb-4">
     <h1 class="text-3xl font-semibold">User Management</h1>
+    <div class="flex gap-2">
+      <button
+        mat-raised-button
+        color="accent"
+        (click)="openAddUserDialog()"
+        class="!ml-4"
+      >
+        <mat-icon class="mr-2">person_add</mat-icon>
+        Add User
+      </button>
+      <button
+        mat-raised-button
+        color="primary"
+        (click)="openCreateGroupDialog()"
+        class="!ml-4"
+      >
+        <mat-icon class="mr-2">group_add</mat-icon>
+        Create Group
+      </button>
+    </div>
   </div>
 
-  <!-- Filter & Include Deleted -->
+  <!-- Filter -->
   <div class="flex gap-4 items-center mb-4">
     <mat-form-field appearance="outline" class="flex-grow !mb-0">
-      <mat-label>Filter Users by Email</mat-label>
+      <mat-label>Filter by Name or Email</mat-label>
       <input
         matInput
         (input)="applyFilter($event)"
-        placeholder="Search by email"
+        placeholder="Search users or groups"
         #input
       />
       <mat-icon matSuffix>search</mat-icon>
     </mat-form-field>
 
-    <mat-checkbox (change)="onIncludeDeletedChange($event.checked)">
-      Include Deleted
-    </mat-checkbox>
+    <mat-form-field appearance="outline" class="min-w-[240px] !mb-0">
+      <mat-label>Filter by Group</mat-label>
+      <mat-select (selectionChange)="applyGroupFilter($event.value)">
+        <mat-option value="">All groups</mat-option>
+        <mat-option *ngFor="let group of groups" [value]="group.id">
+          {{ group.name }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
   </div>
 
   <!-- Loading Indicator -->
@@ -52,64 +78,93 @@
     <span class="block sm:inline">{{ errorLoadingUsers }}</span>
   </div>
 
-  <!-- Users Table -->
+  <!-- Hierarchical Tree Table -->
   <div
     *ngIf="!isLoading && !errorLoadingUsers"
     class="mat-elevation-z8 rounded-lg overflow-auto"
   >
-    <table mat-table [dataSource]="dataSource" matSort class="w-full">
-      <!-- Picture Column -->
-      <ng-container matColumnDef="picture">
-        <th mat-header-cell *matHeaderCellDef class="!pl-4">Picture</th>
-        <td mat-cell *matCellDef="let user" class="!pl-4">
-          <img
-            [src]="user?.picture || 'assets/images/default-avatar.png'"
-            alt="User Picture"
-            class="w-10 h-10 rounded-full object-cover"
-          />
+    <table mat-table [dataSource]="dataSource" class="w-full">
+      <!-- Expand Column -->
+      <ng-container matColumnDef="expand">
+        <th mat-header-cell *matHeaderCellDef class="!w-12"></th>
+        <td mat-cell *matCellDef="let node" class="!w-12">
+          <button
+            *ngIf="node.type === 'group'"
+            mat-icon-button
+            (click)="toggleGroup(node.groupId); $event.stopPropagation()"
+          >
+            <mat-icon>{{
+              isGroupExpanded(node.groupId) ? 'expand_more' : 'chevron_right'
+            }}</mat-icon>
+          </button>
         </td>
       </ng-container>
 
       <!-- Name Column -->
       <ng-container matColumnDef="name">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Username</th>
-        <td mat-cell *matCellDef="let user">{{ user.name }}</td>
-      </ng-container>
-
-      <!-- Email Column -->
-      <ng-container matColumnDef="email">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Email</th>
-        <td mat-cell *matCellDef="let user">{{ user.email }}</td>
-      </ng-container>
-
-      <!-- Role Column -->
-      <ng-container matColumnDef="roles">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Roles</th>
-        <td mat-cell *matCellDef="let user">
-          <div class="flex flex-wrap gap-1">
-            <mat-chip
-              *ngFor="let role of user.roles"
-              [class]="getRoleChipClass(role)"
+        <th mat-header-cell *matHeaderCellDef>Name</th>
+        <td
+          mat-cell
+          *matCellDef="let node"
+          [class.!pl-12]="node.level === 1"
+        >
+          <div class="flex items-center gap-2">
+            <mat-icon *ngIf="node.type === 'group'" class="text-blue-500"
+              >group</mat-icon
             >
-              {{ role | titlecase }}
+            <mat-icon *ngIf="node.type === 'member'" class="text-gray-400"
+              >person</mat-icon
+            >
+            <span [class.font-semibold]="node.type === 'group'">
+              {{ node.type === 'group' ? node.groupName : node.member?.name }}
+            </span>
+            <mat-chip
+              *ngIf="node.type === 'group'"
+              class="!text-xs !h-6 !px-2"
+            >
+              {{ node.memberCount }}
+              {{ node.memberCount === 1 ? 'member' : 'members' }}
             </mat-chip>
           </div>
         </td>
       </ng-container>
 
-      <!-- Created At Column -->
-      <ng-container matColumnDef="createdAt">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Created At</th>
-        <td mat-cell *matCellDef="let user">
-          {{ user.createdAt | date: 'medium' }}
+      <!-- Email Column -->
+      <ng-container matColumnDef="email">
+        <th mat-header-cell *matHeaderCellDef>Email / Country</th>
+        <td mat-cell *matCellDef="let node">
+          <span *ngIf="node.type === 'member'">{{ node.member?.email }}</span>
+          <span *ngIf="node.type === 'group'" class="text-gray-500">{{
+            node.countryCode || 'No country'
+          }}</span>
         </td>
       </ng-container>
 
-      <!-- Updated At Column -->
-      <ng-container matColumnDef="updatedAt">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Updated At</th>
-        <td mat-cell *matCellDef="let user">
-          {{ user.updatedAt | date: 'medium' }}
+      <!-- Roles Column -->
+      <ng-container matColumnDef="roles">
+        <th mat-header-cell *matHeaderCellDef>Role</th>
+        <td mat-cell *matCellDef="let node">
+          <mat-chip
+            *ngIf="node.type === 'member'"
+            [class]="
+              node.member?.role === 'admin'
+                ? 'bg-purple-100 text-purple-800'
+                : 'bg-gray-100 text-gray-800'
+            "
+            class="!text-xs !h-6 !px-2"
+          >
+            {{ node.member?.role | titlecase }}
+          </mat-chip>
+        </td>
+      </ng-container>
+
+      <!-- Created At Column -->
+      <ng-container matColumnDef="createdAt">
+        <th mat-header-cell *matHeaderCellDef>Joined At</th>
+        <td mat-cell *matCellDef="let node">
+          <span *ngIf="node.type === 'member'">{{
+            node.member?.joinedAt | date: 'short'
+          }}</span>
         </td>
       </ng-container>
 
@@ -118,34 +173,39 @@
         <th mat-header-cell *matHeaderCellDef class="!text-right !pr-4">
           Actions
         </th>
-        <td mat-cell *matCellDef="let user" class="text-right pr-2">
-          <button
-            *ngIf="!user.deletedAt"
-            mat-icon-button
-            color="primary"
-            (click)="openUserForm(user)"
-            matTooltip="Edit User"
-          >
-            <mat-icon>edit</mat-icon>
-          </button>
-          <button
-            *ngIf="!user.deletedAt && user.id !== currentUserId"
-            mat-icon-button
-            color="warn"
-            (click)="deleteUser(user.id!)"
-            matTooltip="Delete User"
-          >
-            <mat-icon>delete</mat-icon>
-          </button>
-          <button
-            *ngIf="user.deletedAt"
-            mat-icon-button
-            color="accent"
-            (click)="restoreUser(user.id!)"
-            matTooltip="Restore User"
-          >
-            <mat-icon>restore_from_trash</mat-icon>
-          </button>
+        <td mat-cell *matCellDef="let node" class="text-right pr-2">
+          <!-- Group Actions -->
+          <ng-container *ngIf="node.type === 'group'">
+            <button
+              mat-icon-button
+              color="warn"
+              (click)="deleteGroup(node.groupId, node.groupName); $event.stopPropagation()"
+              matTooltip="Delete Group"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          </ng-container>
+          
+          <!-- Member Actions -->
+          <ng-container *ngIf="node.type === 'member'">
+            <button
+              mat-icon-button
+              color="primary"
+              (click)="openUserForm(node.member); $event.stopPropagation()"
+              matTooltip="Edit User Roles"
+            >
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button
+              *ngIf="node.member?.userId !== currentUserId"
+              mat-icon-button
+              color="warn"
+              (click)="deleteUser(node.member.userId); $event.stopPropagation()"
+              matTooltip="Delete User"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          </ng-container>
         </td>
       </ng-container>
 
@@ -153,31 +213,24 @@
       <tr
         mat-row
         *matRowDef="let row; columns: displayedColumns"
-        [class.opacity-50]="row.deletedAt"
-        class="hover:bg-slate-800 cursor-pointer"
+        [class.bg-gray-50]="row.type === 'group'"
+        [class.hover:bg-gray-100]="row.type === 'group'"
+        [class.hover:bg-slate-800]="row.type === 'member'"
+        [class.cursor-pointer]="row.type === 'group'"
+        (click)="row.type === 'group' && toggleGroup(row.groupId)"
       ></tr>
 
       <!-- Row shown when there is no matching data. -->
       <tr class="mat-row" *matNoDataRow>
-        <td
-          class="mat-cell text-center py-4"
-          [attr.colspan]="displayedColumns.length"
-        >
-          No data matching the filter "{{ input.value }}" or no users found.
+        <td class="mat-cell text-center py-4" [attr.colspan]="displayedColumns.length">
+          <span *ngIf="currentFilter">
+            No users or groups found matching "{{ currentFilter }}".
+          </span>
+          <span *ngIf="!currentFilter">
+            No groups or users found. Create a group to get started.
+          </span>
         </td>
       </tr>
     </table>
-
-    <mat-paginator
-      [length]="totalUsers"
-      [pageSize]="limit"
-      [pageIndex]="currentPageIndex"
-      [pageSizeOptions]="[10, 25, 100]"
-      (page)="handlePageEvent($event)"
-      showFirstLastButtons
-      aria-label="Select page of users"
-      class="bg-gray-50"
-    >
-    </mat-paginator>
   </div>
 </div>

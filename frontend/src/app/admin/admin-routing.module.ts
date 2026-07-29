@@ -18,24 +18,17 @@ import {NgModule} from '@angular/core';
 import {RouterModule, Routes} from '@angular/router';
 import {AdminLayoutComponent} from './admin-layout/admin-layout.component';
 import {UsersManagementComponent} from './users-management/users-management.component';
-import {MediaTemplatesManagementComponent} from './media-templates-management/media-templates-management.component';
-import {SourceAssetsManagementComponent} from './source-assets-management/source-assets-management.component';
-import {MediaGalleryManagementComponent} from './media-gallery-management/media-gallery-management.component';
-import {TagsManagementComponent} from './tags-management/tags-management.component';
-import {AdminHomeComponent} from './admin-home/admin-home.component';
+import {AdminGroupAnalyticsComponent} from './admin-group-analytics/admin-group-analytics.component';
 
 const routes: Routes = [
   {
     path: '', // This will be '/admin' because of the main app routing
     component: AdminLayoutComponent,
     children: [
-      {path: '', redirectTo: 'dashboard', pathMatch: 'full'}, // Default child route
-      {path: 'dashboard', component: AdminHomeComponent},
+      {path: '', redirectTo: 'users', pathMatch: 'full'},
       {path: 'users', component: UsersManagementComponent},
-      {path: 'source-assets', component: SourceAssetsManagementComponent},
-      {path: 'media-templates', component: MediaTemplatesManagementComponent},
-      {path: 'media-gallery', component: MediaGalleryManagementComponent},
-      {path: 'tags', component: TagsManagementComponent},
+      {path: 'analytics', component: AdminGroupAnalyticsComponent},
+      {path: 'dashboard', redirectTo: 'analytics', pathMatch: 'full'},
     ],
   },
 ];

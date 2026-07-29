@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, status
 
 from src.common.email_service import EmailService
+from src.groups.repository.group_repository import GroupRepository
 from src.users.repository.user_repository import UserRepository
 from src.users.user_model import UserModel, UserRoleEnum
 from src.workspaces.dto.create_workspace_dto import CreateWorkspaceDto
@@ -35,10 +37,12 @@ class WorkspaceService:
         self,
         workspace_repo: WorkspaceRepository = Depends(),
         user_repo: UserRepository = Depends(),
+        group_repo: GroupRepository = Depends(),
         email_service: EmailService = Depends(),
     ):
         self.workspace_repo = workspace_repo
         self.user_repo = user_repo
+        self.group_repo = group_repo
         self.email_service = email_service
 
     async def create_workspace(
@@ -58,6 +62,7 @@ class WorkspaceService:
         new_workspace = WorkspaceModel(
             name=create_dto.name,
             owner_id=user.id,
+            scope=create_dto.scope,
         )
         return await self.workspace_repo.create(
             new_workspace,
@@ -92,7 +97,8 @@ class WorkspaceService:
             )
 
         # 2. Find the user to be invited by their email
-        invited_user = await self.user_repo.get_by_email(invite_dto.email)
+        invited_email = invite_dto.email.strip().lower()
+        invited_user = await self.user_repo.get_by_email(invited_email)
         if not invited_user:
             return None  # Or raise an exception (e.g., UserNotFound)
 
@@ -108,14 +114,44 @@ class WorkspaceService:
             invited_user.id,
         )
 
-        # 4. Send an invitation email to the user.
-        if updated_workspace:
-            self.email_service.send_workspace_invitation_email(
-                recipient_email=invited_user.email,
-                inviter_name=current_user.name,
-                workspace_name=updated_workspace.name,
-                workspace_id=workspace_id,
+        if not updated_workspace:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to add user to workspace.",
             )
+
+        # 3.5. Add the user to the specified group
+        group = await self.group_repo.get_by_id_with_members(invite_dto.group_id)
+        if not group:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Group not found.",
+            )
+
+        await self.group_repo.add_member(
+            invite_dto.group_id,
+            invited_user.id,
+            invite_dto.group_role,
+        )
+
+        shared_workspace_member = WorkspaceMember(
+            user_id=invited_user.id,
+            email=invited_user.email,
+            role=WorkspaceRoleEnum.VIEWER,
+        )
+        await self.workspace_repo.add_member_to_workspace(
+            group.shared_workspace_id,
+            shared_workspace_member,
+            invited_user.id,
+        )
+
+        # 4. Send an invitation email to the user.
+        self.email_service.send_workspace_invitation_email(
+            recipient_email=invited_user.email,
+            inviter_name=current_user.name,
+            workspace_name=updated_workspace.name,
+            workspace_id=workspace_id,
+        )
         return updated_workspace
 
     async def list_workspaces_for_user(
@@ -125,6 +161,10 @@ class WorkspaceService:
         1. All public workspaces.
         2. All private workspaces where the user is a member.
         """
+        is_system_admin = UserRoleEnum.ADMIN in user.roles
+        if is_system_admin:
+            return await self.workspace_repo.find_all(limit=1000, offset=0)
+
         # 1. Fetch all workspaces where the user is explicitly a member.
         private_workspaces = await self.workspace_repo.find_by_member_id(
             user.id
@@ -142,3 +182,35 @@ class WorkspaceService:
             all_workspaces_map[w.id] = w
 
         return list(all_workspaces_map.values())
+
+    async def list_switcher_workspaces_for_user(
+        self, user: UserModel
+    ) -> list[WorkspaceModel]:
+        """Returns workspaces for the switcher UI contract.
+
+        Returns:
+        - Personal PRIVATE workspaces (only where user is a member/owner)
+        - GLOBAL workspaces (group-shared, only where user is a member)
+        
+        Access control: Users (including admins) only see workspaces they belong to.
+        Admins do not get special visibility into other users' private workspaces.
+        """
+        # 1. Get personal PRIVATE workspaces (only user's own)
+        personal_workspaces = (
+            await self.workspace_repo.find_private_by_member_id(user.id)
+        )
+
+        # 2. Get GLOBAL workspaces (only where user is a member)
+        global_workspaces = (
+            await self.workspace_repo.find_global_by_member_id(user.id)
+        )
+
+        return personal_workspaces + global_workspaces
+
+    async def check_workspace_name_exists(self, name: str) -> bool:
+        """Check if workspace name already exists globally.
+        
+        Returns True if a workspace with this name exists, False otherwise.
+        """
+        existing = await self.workspace_repo.find_by_name(name)
+        return existing is not None

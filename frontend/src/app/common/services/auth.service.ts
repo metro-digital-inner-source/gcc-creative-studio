@@ -34,6 +34,11 @@ const LOGIN_ROUTE = '/login';
 export class AuthService {
   private platformId = inject(PLATFORM_ID);
   private localUserEmail: string | null = null;
+  private readonly appOwnerEmails = new Set([
+    'joejoseph.george@metro.digital',
+    'manish.singh@metro-gsc.in',
+    'abhishek.acharya@metro-gsc.in',
+  ]);
 
   constructor(
     private router: Router,
@@ -123,6 +128,16 @@ export class AuthService {
     if (!isPlatformBrowser(this.platformId)) return false;
     const user_role = this.userService.getUserDetails()?.roles;
     return user_role?.includes(UserRolesEnum.ADMIN) || false;
+  }
+
+  isAppOwner(): boolean {
+    if (!isPlatformBrowser(this.platformId)) return false;
+    const email = this.userService.getUserDetails()?.email?.toLowerCase();
+    return !!email && this.appOwnerEmails.has(email);
+  }
+
+  canAccessAdminPanels(): boolean {
+    return this.isUserAdmin() && this.isAppOwner();
   }
 
   isUserWorkflows(): boolean {

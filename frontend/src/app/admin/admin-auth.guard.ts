@@ -71,7 +71,7 @@ export class AdminAuthGuard implements CanActivate {
     const userDetails = this.userService.getUserDetails(); // Get user details from localStorage
     const userEmail = userDetails?.email?.toLowerCase();
 
-    if (userEmail && this.authService.isUserAdmin()) {
+    if (userEmail && this.authService.canAccessAdminPanels()) {
       return true; // User is authenticated and email is in the allowed list
     } else {
       // User is not authenticated or not an allowed admin

@@ -81,8 +81,6 @@ class AssetRoleEnum(str, Enum):
     IMAGE_REFERENCE_ASSET = (
         "image_reference_asset"  # An input for R2V with asset type
     )
-    VIDEO_REFERENCE = "video_reference"  # Video used as omni input reference
-    AUDIO_REFERENCE = "audio_reference"  # Audio used as omni input reference
 
 
 class SourceAssetLink(BaseModel):
@@ -143,15 +141,21 @@ class MediaItem(Base):
         ForeignKey("workspaces.id"),
         nullable=False,
     )
+    original_workspace_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workspaces.id"),
+        nullable=True,
+    )
+    moved_to_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("groups.id"),
+        nullable=True,
+    )
     user_email: Mapped[str] = mapped_column(String, nullable=False)
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"),
         nullable=True,
     )
     mime_type: Mapped[MimeTypeEnum] = mapped_column(String, nullable=False)
-    model: Mapped[GenerationModelEnum | str] = mapped_column(
-        String, nullable=False
-    )
+    model: Mapped[GenerationModelEnum] = mapped_column(String, nullable=False)
 
     # Common fields
     prompt: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -250,10 +254,12 @@ class MediaItemModel(BaseDocument):
     workspace_id: int = Field(
         description="Foreign key (ID) to the 'workspaces' collection this creation belongs to.",
     )
+    original_workspace_id: int | None = None
+    moved_to_group_id: int | None = None
     user_email: str
     user_id: int | None = None  # TODO: Change to 'required' in the future
     mime_type: MimeTypeEnum
-    model: GenerationModelEnum | str
+    model: GenerationModelEnum
 
     # Common fields across media types
     prompt: str | None = None

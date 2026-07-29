@@ -31,6 +31,7 @@ import {UserModel, UserRolesEnum} from '../../models/user.model';
 import {Workspace, WorkspaceScope} from '../../models/workspace.model';
 import {BrandGuidelineService} from '../../services/brand-guideline/brand-guideline.service';
 import {UserService} from '../../services/user.service';
+import {environment} from '../../../../environments/environment';
 import {
   BrandGuidelineDialogComponent,
   BrandGuidelineDialogData,
@@ -49,6 +50,7 @@ import {
 })
 export class WorkspaceSwitcherComponent implements OnInit {
   workspaces: Workspace[] = [];
+  selectableWorkspaces: Workspace[] = [];
   activeWorkspaceId: number | null = null;
   activeWorkspace: Workspace | null = null;
   currentUser: UserModel | null;
@@ -72,7 +74,7 @@ export class WorkspaceSwitcherComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.loadWorkspaces();
+    this.loadWorkspaceContext();
     this.workspaceStateService.activeWorkspaceId$.subscribe(id => {
       // Ensure we handle both string (from legacy/url) and number types safely if needed,
       // but ideally workspaceStateService should also be consistent.
@@ -108,17 +110,25 @@ export class WorkspaceSwitcherComponent implements OnInit {
     });
   }
 
-  loadWorkspaces(): void {
-    this.workspaceService.getWorkspaces().subscribe({
+  loadWorkspaceContext(): void {
+    this.workspaceService.getSwitcherWorkspaces().subscribe({
       next: workspaces => {
-        this.workspaces = workspaces;
-        // Now that we have the workspaces, we can determine the initial active one.
-        this.initializeActiveWorkspace();
+        this.setWorkspaceCollections(workspaces);
       },
       error: error => {
         handleErrorSnackbar(this.snackBar, error, 'Could not load workspaces');
       },
     });
+  }
+
+  private setWorkspaceCollections(workspaces: Workspace[]): void {
+    this.workspaces = workspaces;
+    this.selectableWorkspaces = workspaces.filter(
+      workspace =>
+        workspace.scope === WorkspaceScope.PRIVATE ||
+        workspace.scope === WorkspaceScope.GLOBAL,
+    );
+    this.initializeActiveWorkspace();
   }
 
   initializeActiveWorkspace(): void {
@@ -139,21 +149,20 @@ export class WorkspaceSwitcherComponent implements OnInit {
     if (
       preferredWorkspaceId &&
       !isNaN(preferredWorkspaceId) &&
-      this.workspaces.some(w => w.id === preferredWorkspaceId)
+      this.selectableWorkspaces.some(w => w.id === preferredWorkspaceId)
     ) {
       this.setActiveWorkspace(preferredWorkspaceId);
       return;
     }
 
-    const googleWorkspace = this.workspaces.find(
-      w => w.scope === WorkspaceScope.PUBLIC,
-    );
-    if (googleWorkspace) {
-      // Fallback to public workspace
-      this.setActiveWorkspace(googleWorkspace.id);
-    } else if (this.workspaces.length > 0) {
-      // Fallback to the first workspace
-      this.setActiveWorkspace(this.workspaces[0].id);
+    if (this.selectableWorkspaces.length > 0) {
+      this.setActiveWorkspace(this.selectableWorkspaces[0].id);
+    } else {
+      this.activeWorkspace = null;
+      this.workspaceStateService.setActiveWorkspaceId(null);
+      if (this.isBrowser) {
+        localStorage.removeItem('activeWorkspaceId');
+      }
     }
   }
 
@@ -172,44 +181,6 @@ export class WorkspaceSwitcherComponent implements OnInit {
         localStorage.removeItem('activeWorkspaceId');
       }
     }
-  }
-
-  openCreateWorkspaceDialog(): void {
-    const dialogRef = this.dialog.open(CreateWorkspaceModalComponent, {
-      width: '300px',
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      if (result) {
-        this.createWorkspace(result);
-      }
-    });
-  }
-
-  createWorkspace(name: string): void {
-    this.workspaceService.createWorkspace(name).subscribe({
-      next: newWorkspace => {
-        handleSuccessSnackbar(this.snackBar, `Workspace "${name}" created!`);
-        this.workspaces.push(newWorkspace);
-        this.setActiveWorkspace(newWorkspace.id);
-      },
-      error: error => {
-        handleErrorSnackbar(this.snackBar, error, 'Could not create workspace');
-      },
-    });
-  }
-
-  get canInvite(): boolean {
-    if (
-      !this.currentUser ||
-      !this.activeWorkspace ||
-      this.activeWorkspace?.scope === WorkspaceScope.PUBLIC
-    ) {
-      return false;
-    }
-    const isOwner = this.currentUser.id === this.activeWorkspace.ownerId;
-    const isAdmin = !!this.currentUser.roles?.includes(UserRolesEnum.ADMIN);
-    return isOwner || isAdmin;
   }
 
   get canAccessBrandGuidelines(): boolean {
@@ -231,38 +202,6 @@ export class WorkspaceSwitcherComponent implements OnInit {
     const isAdmin = !!this.currentUser.roles?.includes(UserRolesEnum.ADMIN);
     const isOwner = this.currentUser.id === this.activeWorkspace.ownerId;
     return isAdmin || isOwner;
-  }
-
-  openInviteDialog(event: MouseEvent): void {
-    event.stopPropagation();
-    if (!this.activeWorkspace) return;
-
-    const dialogRef = this.dialog.open<
-      InviteUserModalComponent,
-      InviteUserData
-    >(InviteUserModalComponent, {
-      width: '350px',
-      data: {workspaceName: this.activeWorkspace.name},
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      if (result && this.activeWorkspaceId) {
-        this.workspaceService
-          .inviteUser(this.activeWorkspaceId, result.email, result.role)
-          .subscribe({
-            next: () => {
-              handleSuccessSnackbar(this.snackBar, 'Invitation sent!');
-            },
-            error: error => {
-              handleErrorSnackbar(
-                this.snackBar,
-                error,
-                'Failed to send invitation',
-              );
-            },
-          });
-      }
-    });
   }
 
   openBrandGuidelinesDialog(event: MouseEvent): void {
@@ -367,5 +306,10 @@ export class WorkspaceSwitcherComponent implements OnInit {
         '_blank',
       );
     }
+  }
+
+  getBackendUrl(): string {
+    const backendUrl = localStorage.getItem('backend_url') || environment.backendURL.replace(/\/api$/, '');
+    return backendUrl;
   }
 }

@@ -136,6 +136,68 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
         workspaces = result.scalars().all()
         return [self._map_to_schema(w) for w in workspaces]
 
+    async def find_private_by_member_id(
+        self, user_id: int
+    ) -> list[WorkspaceModel]:
+        """Finds private workspaces where the user is a member."""
+        result = await self.db.execute(
+            select(self.model)
+            .join(WorkspaceMemberAssociation)
+            .where(
+                WorkspaceMemberAssociation.user_id == user_id,
+                self.model.scope == WorkspaceScopeEnum.PRIVATE.value,
+            ),
+        )
+        workspaces = result.scalars().all()
+        return [self._map_to_schema(w) for w in workspaces]
+
+    async def find_global_by_member_id(
+        self, user_id: int
+    ) -> list[WorkspaceModel]:
+        """Finds global (group-shared) workspaces where the user is a member."""
+        result = await self.db.execute(
+            select(self.model)
+            .join(WorkspaceMemberAssociation)
+            .where(
+                WorkspaceMemberAssociation.user_id == user_id,
+                self.model.scope == WorkspaceScopeEnum.GLOBAL.value,
+            ),
+        )
+        workspaces = result.scalars().all()
+        return [self._map_to_schema(w) for w in workspaces]
+
+    async def find_all_private(
+        self,
+        limit: int,
+        offset: int,
+    ) -> list[WorkspaceModel]:
+        """Finds all private workspaces."""
+        result = await self.db.execute(
+            select(self.model)
+            .where(self.model.scope == WorkspaceScopeEnum.PRIVATE.value)
+            .order_by(self.model.id)
+            .limit(limit)
+            .offset(offset),
+        )
+        workspaces = result.scalars().all()
+        return [self._map_to_schema(w) for w in workspaces]
+
+    async def find_all_global(
+        self,
+        limit: int = 1000,
+        offset: int = 0,
+    ) -> list[WorkspaceModel]:
+        """Finds all GLOBAL (group-shared) workspaces."""
+        result = await self.db.execute(
+            select(self.model)
+            .where(self.model.scope == WorkspaceScopeEnum.GLOBAL.value)
+            .order_by(self.model.id)
+            .limit(limit)
+            .offset(offset),
+        )
+        workspaces = result.scalars().all()
+        return [self._map_to_schema(w) for w in workspaces]
+
     async def is_member(self, workspace_id: int, user_id: int) -> bool:
         """Checks if a user is a member of a workspace."""
         result = await self.db.execute(
@@ -154,6 +216,17 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
             select(self.model.scope).where(self.model.id == workspace_id),
         )
         return result.scalar_one_or_none()
+
+    async def find_by_name(self, name: str) -> WorkspaceModel | None:
+        """Find workspace by name (global uniqueness check).
+        
+        Returns the workspace if found, None otherwise.
+        """
+        result = await self.db.execute(
+            select(self.model).where(self.model.name == name),
+        )
+        workspace = result.scalar_one_or_none()
+        return self._map_to_schema(workspace) if workspace else None
 
     def _map_to_schema(self, workspace: Workspace) -> WorkspaceModel:
         """Helper to map SQLAlchemy Workspace to Pydantic WorkspaceModel."""

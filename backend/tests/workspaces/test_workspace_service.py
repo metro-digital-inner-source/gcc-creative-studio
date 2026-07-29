@@ -38,6 +38,11 @@ def fixture_mock_user_repo():
     return AsyncMock()
 
 
+@pytest.fixture(name="mock_group_repo")
+def fixture_mock_group_repo():
+    return AsyncMock()
+
+
 @pytest.fixture(name="mock_email_service")
 def fixture_mock_email_service():
     return MagicMock()  # Synchronous service usually
@@ -45,11 +50,15 @@ def fixture_mock_email_service():
 
 @pytest.fixture(name="workspace_service")
 def fixture_workspace_service(
-    mock_workspace_repo, mock_user_repo, mock_email_service
+    mock_workspace_repo,
+    mock_user_repo,
+    mock_group_repo,
+    mock_email_service,
 ):
     return WorkspaceService(
         workspace_repo=mock_workspace_repo,
         user_repo=mock_user_repo,
+        group_repo=mock_group_repo,
         email_service=mock_email_service,
     )
 
@@ -101,6 +110,7 @@ class TestInviteUserToWorkspace:
         invite_dto = InviteUserDto(
             email="guest@example.com",
             role=WorkspaceRoleEnum.VIEWER,
+            group_id=1,
         )
 
         with pytest.raises(HTTPException) as exc_info:
@@ -124,6 +134,7 @@ class TestInviteUserToWorkspace:
         invite_dto = InviteUserDto(
             email="guest@example.com",
             role=WorkspaceRoleEnum.VIEWER,
+            group_id=1,
         )
 
         with pytest.raises(HTTPException) as exc_info:
@@ -151,6 +162,7 @@ class TestInviteUserToWorkspace:
         invite_dto = InviteUserDto(
             email="unknown@example.com",
             role=WorkspaceRoleEnum.VIEWER,
+            group_id=1,
         )
 
         result = await workspace_service.invite_user_to_workspace(
@@ -170,6 +182,7 @@ class TestInviteUserToWorkspace:
         workspace_service,
         mock_workspace_repo,
         mock_user_repo,
+        mock_group_repo,
         mock_email_service,
         mock_user,
     ):
@@ -197,7 +210,11 @@ class TestInviteUserToWorkspace:
         invite_dto = InviteUserDto(
             email="guest@example.com",
             role=WorkspaceRoleEnum.VIEWER,
+            group_id=1,
         )
+
+        mock_group = MagicMock(shared_workspace_id=2)
+        mock_group_repo.get_by_id_with_members.return_value = mock_group
 
         result = await workspace_service.invite_user_to_workspace(
             1,
@@ -206,7 +223,9 @@ class TestInviteUserToWorkspace:
         )
 
         assert result == updated_workspace
-        mock_workspace_repo.add_member_to_workspace.assert_called_once()
+        assert mock_workspace_repo.add_member_to_workspace.call_count == 2
+        mock_group_repo.get_by_id_with_members.assert_called_once_with(1)
+        mock_group_repo.add_member.assert_called_once()
         mock_email_service.send_workspace_invitation_email.assert_called_once()
 
 
@@ -236,3 +255,101 @@ class TestListWorkspacesForUser:
         ids = [w.id for w in result]
         assert 1 in ids
         assert 2 in ids
+
+
+class TestListSwitcherWorkspacesForUser:
+    """Tests for WorkspaceService.list_switcher_workspaces_for_user."""
+
+    @pytest.mark.anyio
+    async def test_list_switcher_workspaces_for_regular_user(
+        self,
+        workspace_service,
+        mock_workspace_repo,
+        mock_group_repo,
+        mock_user,
+    ):
+        w1 = WorkspaceModel(id=1, name="Personal", owner_id=mock_user.id)
+        w_global = WorkspaceModel(id=3, name="AI Enabler", owner_id=99)
+        mock_workspace_repo.find_private_by_member_id.return_value = [w1]
+        mock_workspace_repo.find_global_by_member_id.return_value = [w_global]
+
+        result = await workspace_service.list_switcher_workspaces_for_user(
+            mock_user
+        )
+
+        # Non-admin sees: personal PRIVATE + GLOBAL where member
+        assert len(result) == 2
+        assert result[0].id == 1
+        assert result[1].id == 3
+        mock_workspace_repo.find_private_by_member_id.assert_called_once_with(
+            mock_user.id
+        )
+        mock_workspace_repo.find_global_by_member_id.assert_called_once_with(
+            mock_user.id
+        )
+
+    @pytest.mark.anyio
+    async def test_list_switcher_workspaces_for_admin(
+        self,
+        workspace_service,
+        mock_workspace_repo,
+        mock_group_repo,
+    ):
+        from src.users.user_model import UserModel
+
+        admin_user = UserModel(
+            id=99,
+            email="admin@example.com",
+            roles=["admin"],
+            name="Admin",
+        )
+        w_personal = WorkspaceModel(id=10, name="admin@example.com", owner_id=99)
+        w_global1 = WorkspaceModel(id=11, name="AI Enabler", owner_id=99)
+        mock_workspace_repo.find_private_by_member_id.return_value = [w_personal]
+        mock_workspace_repo.find_global_by_member_id.return_value = [w_global1]
+
+        result = await workspace_service.list_switcher_workspaces_for_user(
+            admin_user
+        )
+
+        # Admins also only see workspaces they belong to (no special visibility).
+        assert len(result) == 2
+        assert result[0].id == 10
+        assert result[1].id == 11
+        mock_workspace_repo.find_private_by_member_id.assert_called_once_with(99)
+        mock_workspace_repo.find_global_by_member_id.assert_called_once_with(99)
+        mock_workspace_repo.find_all_private.assert_not_called()
+        mock_workspace_repo.find_all_global.assert_not_called()
+
+
+class TestCheckWorkspaceNameExists:
+    """Tests for WorkspaceService.check_workspace_name_exists."""
+
+    @pytest.mark.anyio
+    async def test_check_workspace_name_exists_true(
+        self,
+        workspace_service,
+        mock_workspace_repo,
+    ):
+        """Test that check_workspace_name_exists returns True when workspace exists."""
+        existing_workspace = WorkspaceModel(id=1, name="Test", owner_id=1)
+        mock_workspace_repo.find_by_name.return_value = existing_workspace
+
+        result = await workspace_service.check_workspace_name_exists("Test")
+
+        assert result is True
+        mock_workspace_repo.find_by_name.assert_called_once_with("Test")
+
+    @pytest.mark.anyio
+    async def test_check_workspace_name_exists_false(
+        self,
+        workspace_service,
+        mock_workspace_repo,
+    ):
+        """Test that check_workspace_name_exists returns False when workspace doesn't exist."""
+        mock_workspace_repo.find_by_name.return_value = None
+
+        result = await workspace_service.check_workspace_name_exists("NonExistent")
+
+        assert result is False
+        mock_workspace_repo.find_by_name.assert_called_once_with("NonExistent")

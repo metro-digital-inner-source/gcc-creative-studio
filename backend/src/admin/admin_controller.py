@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fastapi import APIRouter, Depends
-from src.auth.auth_guard import RoleChecker
-from src.users.user_model import UserRoleEnum
+from fastapi import APIRouter, Depends, HTTPException, status
+from src.auth.auth_guard import RoleChecker, get_current_user
+from src.config.config_service import config_service
+from src.users.user_model import UserRoleEnum, UserModel
 from src.admin.admin_service import AdminService
+from src.admin.dto.admin_request_dto import AddUserByEmailRequest
 from src.admin.dto.admin_response_dto import (
     AdminOverviewStats,
     AdminMediaOverTime,
@@ -23,12 +25,20 @@ from src.admin.dto.admin_response_dto import (
     AdminActiveRole,
     AdminGenerationHealth,
     AdminMonthlyActiveUsers,
+    AddUserByEmailResponse,
 )
 
 router = APIRouter(
     prefix="/api/admin",
     tags=["Admin Dashboard"],
-    dependencies=[Depends(RoleChecker(allowed_roles=[UserRoleEnum.ADMIN]))],
+    dependencies=[
+        Depends(
+            RoleChecker(
+                allowed_roles=[UserRoleEnum.ADMIN],
+                allowed_emails=config_service.ADMIN_OWNER_EMAILS,
+            )
+        )
+    ],
 )
 
 
@@ -132,3 +142,118 @@ async def cleanup_stuck_jobs(admin_service: AdminService = Depends()):
     """
     count = await admin_service.cleanup_stuck_jobs()
     return {"message": f"Cleaned up {count} stuck jobs", "count": count}
+
+
+# Group Management Endpoints
+
+
+@router.get("/groups")
+async def get_all_groups(admin_service: AdminService = Depends()):
+    """Retrieves all groups (admin view)."""
+    return await admin_service.get_all_groups()
+
+
+@router.post("/groups")
+async def create_group_admin(
+    name: str,
+    country_code: str | None = None,
+    admin_service: AdminService = Depends(),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Creates a new group (admin action)."""
+    return await admin_service.create_group_admin(
+        name,
+        current_user,
+        country_code,
+    )
+
+
+@router.post("/groups/{group_id}/users")
+async def add_user_to_group(
+    group_id: int,
+    user_id: int,
+    role: str = "member",
+    admin_service: AdminService = Depends(),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Adds a user to a group (admin action)."""
+    return await admin_service.add_user_to_group(
+        group_id, user_id, role, current_user
+    )
+
+
+@router.post(
+    "/groups/{group_id}/users/by-email",
+    response_model=AddUserByEmailResponse,
+)
+async def add_user_to_group_by_email(
+    group_id: int,
+    request: AddUserByEmailRequest,
+    admin_service: AdminService = Depends(),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Creates/gets a user by email and assigns them to a group as MEMBER.
+    User automatically gets their own private workspace.
+    """
+    return await admin_service.add_user_to_group_by_email(
+        group_id=group_id,
+        email=request.email,
+        role="member",  # Always member
+        admin_user=current_user,
+    )
+
+
+@router.delete("/groups/{group_id}")
+async def delete_group_admin(
+    group_id: int,
+    admin_service: AdminService = Depends(),
+):
+    """Deletes a group and all its members (admin action)."""
+    deleted = await admin_service.delete_group_admin(group_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Group {group_id} not found",
+        )
+    return {"message": f"Group {group_id} deleted successfully"}
+
+
+@router.get("/groups/usage-summary")
+async def get_group_usage_summary(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    admin_service: AdminService = Depends(),
+):
+    """Retrieves aggregate usage summary across all groups."""
+    return await admin_service.get_group_usage_summary(start_date, end_date)
+
+
+@router.get("/groups/usage-breakdown")
+async def get_group_usage_breakdown(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    admin_service: AdminService = Depends(),
+):
+    """Retrieves per-group usage breakdown."""
+    return await admin_service.get_group_usage_breakdown(start_date, end_date)
+
+
+@router.post("/dev/reset-database")
+async def dev_reset_database(
+    current_user: UserModel = Depends(
+        RoleChecker(allowed_roles=[UserRoleEnum.ADMIN])
+    ),
+    admin_service: AdminService = Depends(),
+):
+    """DEV ONLY: Reset all application data (truncate all tables).
+    
+    This endpoint is only available in dev/local environments and requires
+    admin privileges. Use to start fresh testing after deployment.
+    """
+    if config_service.ENVIRONMENT not in ["development", "local"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint is only available in development/local environments.",
+        )
+
+    return await admin_service.reset_dev_database()

@@ -116,6 +116,9 @@ async def delete_user(
 ):
     """Soft deletes a user from the database.
     This functionality is restricted to administrators.
+    
+    If the user owns workspaces, ownership will be transferred to another admin.
+    Returns 409 Conflict if user cannot be deleted (no admin available for transfer).
     """
     if user_id == current_user.id:
         raise HTTPException(
@@ -126,7 +129,10 @@ async def delete_user(
         user_id, deleted_by=current_user.id
     )
     if not success:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete user: owns workspaces and no admin available for ownership transfer"
+        )
 
 
 @router.post(

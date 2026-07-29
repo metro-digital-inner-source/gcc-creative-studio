@@ -97,6 +97,14 @@ class ConfigService(BaseSettings):
         ""  # The email address to send from (e.g., no-reply@your-domain.com)
     )
     ADMIN_USER_EMAIL: str = "system"
+    ADMIN_OWNER_EMAILS_STR: str = Field(
+        default=(
+            "joejoseph.george@metro.digital,"
+            "manish.singh@metro-gsc.in,"
+            "abhishek.acharya@metro-gsc.in"
+        ),
+        alias="ADMIN_OWNER_EMAILS",
+    )
 
     # --- Workflows ---
     WORKFLOWS_LOCATION: str = "us-central1"
@@ -143,6 +151,15 @@ class ConfigService(BaseSettings):
             org.strip()
             for org in self.ALLOWED_ORGS_STR.split(",")
             if org.strip()
+        )
+
+    @computed_field
+    @property
+    def ADMIN_OWNER_EMAILS(self) -> set[str]:
+        return set(
+            email.strip().lower()
+            for email in self.ADMIN_OWNER_EMAILS_STR.split(",")
+            if email.strip()
         )
 
     @computed_field

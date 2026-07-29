@@ -39,6 +39,7 @@ class WorkspaceScopeEnum(str, Enum):
 
     PUBLIC = "public"  # Visible to everyone (e.g., the "Default Google Workspace" gallery)
     PRIVATE = "private"  # Visible only to users listed in the 'members' list.
+    GLOBAL = "global"  # Shared group workspace, visible to all group members.
 
 
 class WorkspaceMember(BaseModel):

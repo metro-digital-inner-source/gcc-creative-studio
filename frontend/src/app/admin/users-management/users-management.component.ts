@@ -23,21 +23,46 @@ import {
   PLATFORM_ID,
 } from '@angular/core';
 import {MatTableDataSource} from '@angular/material/table';
-import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort} from '@angular/material/sort';
 import {Subject, firstValueFrom} from 'rxjs';
 import {debounceTime, distinctUntilChanged, takeUntil} from 'rxjs/operators';
 import {isPlatformBrowser} from '@angular/common';
-import {UserService, PaginatedResponse} from './user.service';
+import {UserService} from './user.service';
 import {MatDialog} from '@angular/material/dialog';
 import {UserFormComponent} from './user-form.component';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import {UserModel, UserRolesEnum} from '../../common/models/user.model';
+import {UserModel} from '../../common/models/user.model';
+import {Group, GroupMember} from '../../common/models/group.model';
+import {GroupService} from '../../services/group/group.service';
+import {CreateGroupDialogComponent} from '../groups-management/create-group-dialog/create-group-dialog.component';
+import {AddMemberDialogComponent} from '../groups-management/add-member-dialog/add-member-dialog.component';
+import {
+  AddUserDialogComponent,
+  AddUserDialogResult,
+} from './add-user-dialog.component';
 import {
   handleErrorSnackbar,
   handleSuccessSnackbar,
 } from '../../utils/handleMessageSnackbar';
 import {ConfirmationDialogComponent} from '../../common/components/confirmation-dialog/confirmation-dialog.component';
+
+// Tree node interface for hierarchical display
+interface TreeNode {
+  type: 'group' | 'member';
+  level: number;
+  expandable: boolean;
+  isExpanded?: boolean;
+  
+  // Group properties
+  groupId?: number;
+  groupName?: string;
+  countryCode?: string;
+  memberCount?: number;
+  
+  // Member properties
+  member?: GroupMember;
+  parentGroupId?: number;
+}
 
 @Component({
   selector: 'app-users-management',
@@ -46,37 +71,31 @@ import {ConfirmationDialogComponent} from '../../common/components/confirmation-
 })
 export class UsersManagementComponent implements OnInit, OnDestroy {
   displayedColumns: string[] = [
-    'picture',
+    'expand',
     'name',
     'email',
     'roles',
     'createdAt',
-    'updatedAt',
     'actions',
   ];
-  dataSource: MatTableDataSource<UserModel> =
-    new MatTableDataSource<UserModel>();
+  dataSource: MatTableDataSource<TreeNode> = new MatTableDataSource<TreeNode>();
   isLoading = true;
   errorLoadingUsers: string | null = null;
-  lastResponse: PaginatedResponse | undefined;
-
-  // --- Pagination State ---
-  totalUsers = 0;
-  limit = 10;
-  currentPageIndex = 0;
+  groups: Group[] = [];
+  expandedGroupIds = new Set<number>();
   currentUserId: number | null = null;
 
   // --- Filtering & Destroy State ---
   private filterSubject = new Subject<string>();
   private destroy$ = new Subject<void>();
   currentFilter = '';
-  includeDeleted = false; // Added
+  selectedGroupId: number | null = null;
 
-  @ViewChild(MatPaginator) paginator!: MatPaginator;
   @ViewChild(MatSort) sort!: MatSort;
 
   constructor(
     private userService: UserService,
+    private groupService: GroupService,
     public dialog: MatDialog,
     private _snackBar: MatSnackBar,
     @Inject(PLATFORM_ID) private platformId: Object,
@@ -88,15 +107,15 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
       if (userDetailsStr) {
         this.currentUserId = JSON.parse(userDetailsStr).id || null;
       }
-      void this.fetchPage(0);
+      this.loadGroups();
     }
 
-    // Debounce filter input to avoid excessive Firestore reads
+    // Debounce filter input
     this.filterSubject
-      .pipe(debounceTime(500), distinctUntilChanged(), takeUntil(this.destroy$))
+      .pipe(debounceTime(300), distinctUntilChanged(), takeUntil(this.destroy$))
       .subscribe(filterValue => {
         this.currentFilter = filterValue;
-        this.resetPaginationAndFetch();
+        this.applyFilterToTree();
       });
   }
 
@@ -105,40 +124,70 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  handlePageEvent(event: PageEvent) {
-    // If page size changes, we must reset everything.
-    if (this.limit !== event.pageSize) {
-      this.limit = event.pageSize;
-      this.resetPaginationAndFetch();
-      return;
-    }
-    void this.fetchPage(event.pageIndex);
+  loadGroups(): void {
+    this.isLoading = true;
+    this.errorLoadingUsers = null;
+    
+    this.groupService.getAllGroups().subscribe({
+      next: (groups: Group[]) => {
+        this.groups = groups;
+        this.buildTreeData();
+        this.isLoading = false;
+      },
+      error: (err: any) => {
+        this.errorLoadingUsers = 'Failed to load groups and users.';
+        console.error('Error loading groups:', err);
+        this.isLoading = false;
+      },
+    });
   }
 
-  async fetchPage(targetPageIndex: number) {
-    this.isLoading = true;
-    const offset = targetPageIndex * this.limit;
-
-    try {
-      const finalResponse = await firstValueFrom(
-        this.userService.getUsers(
-          this.limit,
-          this.currentFilter,
-          offset,
-          this.includeDeleted, // Pass here
-        ),
-        {defaultValue: {data: [], count: 0} as any},
-      );
-
-      this.dataSource.data = finalResponse.data;
-      this.totalUsers = finalResponse.count;
-      this.currentPageIndex = targetPageIndex;
-    } catch (err) {
-      this.errorLoadingUsers = 'Failed to load users.';
-      console.error(err);
-    } finally {
-      this.isLoading = false;
+  buildTreeData(): void {
+    const treeNodes: TreeNode[] = [];
+    
+    for (const group of this.groups) {
+      // Add group node
+      const groupNode: TreeNode = {
+        type: 'group',
+        level: 0,
+        expandable: true,
+        isExpanded: this.expandedGroupIds.has(group.id),
+        groupId: group.id,
+        groupName: group.name,
+        countryCode: group.countryCode,
+        memberCount: group.members?.length || 0,
+      };
+      treeNodes.push(groupNode);
+      
+      // Add member nodes if group is expanded
+      if (this.expandedGroupIds.has(group.id) && group.members) {
+        for (const member of group.members) {
+          const memberNode: TreeNode = {
+            type: 'member',
+            level: 1,
+            expandable: false,
+            member: member,
+            parentGroupId: group.id,
+          };
+          treeNodes.push(memberNode);
+        }
+      }
     }
+    
+    this.dataSource.data = treeNodes;
+  }
+
+  toggleGroup(groupId: number): void {
+    if (this.expandedGroupIds.has(groupId)) {
+      this.expandedGroupIds.delete(groupId);
+    } else {
+      this.expandedGroupIds.add(groupId);
+    }
+    this.buildTreeData();
+  }
+
+  isGroupExpanded(groupId: number): boolean {
+    return this.expandedGroupIds.has(groupId);
   }
 
   applyFilter(event: Event): void {
@@ -146,62 +195,123 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
     this.filterSubject.next(filterValue.trim().toLowerCase());
   }
 
-  private resetPaginationAndFetch() {
-    this.currentPageIndex = 0;
-    if (this.paginator) {
-      this.paginator.pageIndex = 0;
-    }
-    void this.fetchPage(0);
-  }
+  applyFilterToTree(): void {
+    const visibleGroups = this.selectedGroupId
+      ? this.groups.filter(group => group.id === this.selectedGroupId)
+      : this.groups;
 
-  onIncludeDeletedChange(checked: boolean) {
-    this.includeDeleted = checked;
-    this.resetPaginationAndFetch();
-  }
+    if (!this.currentFilter) {
+      const treeNodes: TreeNode[] = [];
+      for (const group of visibleGroups) {
+        const groupNode: TreeNode = {
+          type: 'group',
+          level: 0,
+          expandable: true,
+          isExpanded: this.expandedGroupIds.has(group.id),
+          groupId: group.id,
+          groupName: group.name,
+          countryCode: group.countryCode,
+          memberCount: group.members?.length || 0,
+        };
+        treeNodes.push(groupNode);
 
-  async restoreUser(userId: string): Promise<void> {
-    this.isLoading = true;
-    try {
-      await firstValueFrom(this.userService.restoreUser(userId));
-      handleSuccessSnackbar(this._snackBar, 'User restored successfully!');
-      await this.fetchPage(this.currentPageIndex);
-    } catch (err) {
-      console.error(`Error restoring user ${userId}:`, err);
-      handleErrorSnackbar(this._snackBar, err, 'Restore user');
-    } finally {
-      this.isLoading = false;
-    }
-  }
-
-  openUserForm(user: UserModel): void {
-    const dialogRef = this.dialog.open(UserFormComponent, {
-      width: '450px',
-      data: {user: user, isEditMode: true},
-    });
-
-    dialogRef
-      .afterClosed()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(async (result: UserModel | undefined) => {
-        if (result) {
-          this.isLoading = true;
-          try {
-            // The form returns the full user object with updated roles
-            await firstValueFrom(this.userService.updateUser(result));
-            handleSuccessSnackbar(this._snackBar, 'User updated successfully!');
-            // Refetch to show updated data on the current page.
-            await this.fetchPage(this.currentPageIndex);
-          } catch (err) {
-            console.error(`Error updating user ${result.id}:`, err);
-            handleErrorSnackbar(this._snackBar, err, 'Update user');
-          } finally {
-            this.isLoading = false;
+        if (this.expandedGroupIds.has(group.id) && group.members) {
+          for (const member of group.members) {
+            treeNodes.push({
+              type: 'member',
+              level: 1,
+              expandable: false,
+              member,
+              parentGroupId: group.id,
+            });
           }
         }
-      });
+      }
+      this.dataSource.data = treeNodes;
+      return;
+    }
+
+    const filter = this.currentFilter.toLowerCase();
+    const treeNodes: TreeNode[] = [];
+
+    for (const group of visibleGroups) {
+      const matchingMembers = group.members?.filter(member => 
+        member.email.toLowerCase().includes(filter) ||
+        member.name.toLowerCase().includes(filter)
+      ) || [];
+      
+      // Show group if it has matching members or if group name matches
+      if (matchingMembers.length > 0 || group.name.toLowerCase().includes(filter)) {
+        const groupNode: TreeNode = {
+          type: 'group',
+          level: 0,
+          expandable: true,
+          isExpanded: true, // Auto-expand when filtering
+          groupId: group.id,
+          groupName: group.name,
+          countryCode: group.countryCode,
+          memberCount: matchingMembers.length,
+        };
+        treeNodes.push(groupNode);
+        
+        // Add matching members
+        for (const member of matchingMembers) {
+          const memberNode: TreeNode = {
+            type: 'member',
+            level: 1,
+            expandable: false,
+            member: member,
+            parentGroupId: group.id,
+          };
+          treeNodes.push(memberNode);
+        }
+      }
+    }
+    
+    this.dataSource.data = treeNodes;
   }
 
-  deleteUser(userId: string): void {
+  applyGroupFilter(groupId: string): void {
+    this.selectedGroupId = groupId ? Number(groupId) : null;
+    this.applyFilterToTree();
+  }
+
+  openUserForm(member: GroupMember): void {
+    // Fetch full user details first
+    this.userService.getUser(member.userId).subscribe({
+      next: (user: UserModel) => {
+        const dialogRef = this.dialog.open(UserFormComponent, {
+          width: '450px',
+          data: {user: user, isEditMode: true},
+        });
+
+        dialogRef
+          .afterClosed()
+          .pipe(takeUntil(this.destroy$))
+          .subscribe(async (result: UserModel | undefined) => {
+            if (result) {
+              this.isLoading = true;
+              try {
+                await firstValueFrom(this.userService.updateUser(result));
+                handleSuccessSnackbar(this._snackBar, 'User updated successfully!');
+                this.loadGroups();
+              } catch (err) {
+                console.error('Error updating user:', err);
+                handleErrorSnackbar(this._snackBar, err, 'Update user');
+              } finally {
+                this.isLoading = false;
+              }
+            }
+          });
+      },
+      error: (err: any) => {
+        console.error('Error fetching user:', err);
+        handleErrorSnackbar(this._snackBar, err, 'Fetch user');
+      },
+    });
+  }
+
+  deleteUser(userId: number): void {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: '400px',
       data: {
@@ -210,13 +320,13 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
       },
     });
 
-    dialogRef.afterClosed().subscribe(async result => {
+    dialogRef.afterClosed().subscribe(async (result: any) => {
       if (result) {
         this.isLoading = true;
         try {
           await firstValueFrom(this.userService.deleteUser(userId));
           handleSuccessSnackbar(this._snackBar, 'User deleted successfully!');
-          this.resetPaginationAndFetch();
+          this.loadGroups();
         } catch (err) {
           console.error(`Error deleting user ${userId}:`, err);
           handleErrorSnackbar(this._snackBar, err, 'Delete user');
@@ -227,22 +337,107 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
     });
   }
 
-  public getRoleChipClass(role: string): string {
-    const roleLower = role.toLowerCase();
+  deleteGroup(groupId: number, groupName: string): void {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: '400px',
+      data: {
+        title: 'Confirm Group Deletion',
+        message: `Are you sure you want to delete the group "${groupName}"? This will remove all group members and cannot be undone.`,
+      },
+    });
 
-    // Using a switch statement makes it easy to add more roles later
-    switch (roleLower) {
-      case UserRolesEnum.ADMIN.toLowerCase():
-        return '!bg-amber-500/20 !text-amber-300';
-      case UserRolesEnum.USER.toLowerCase():
-        return '!bg-blue-500/20 !text-blue-300';
-      case UserRolesEnum.CREATOR.toLowerCase():
-        return '!bg-purple-500/20 !text-purple-300';
-      case UserRolesEnum.WORKFLOWS.toLowerCase():
-        return '!bg-green-500/20 !text-green-300';
-      default:
-        // It's good practice to have a default style
-        return '!bg-gray-500/20 !text-gray-300';
-    }
+    dialogRef.afterClosed().subscribe(async (result: any) => {
+      if (result) {
+        this.isLoading = true;
+        try {
+          await firstValueFrom(this.groupService.deleteGroupAdmin(groupId));
+          handleSuccessSnackbar(this._snackBar, `Group "${groupName}" deleted successfully!`);
+          // Remove from expanded set if it was expanded
+          this.expandedGroupIds.delete(groupId);
+          this.loadGroups();
+        } catch (err) {
+          console.error(`Error deleting group ${groupId}:`, err);
+          handleErrorSnackbar(this._snackBar, err, 'Delete group');
+        } finally {
+          this.isLoading = false;
+        }
+      }
+    });
+  }
+
+  openCreateGroupDialog(): void {
+    const dialogRef = this.dialog.open(CreateGroupDialogComponent, {
+      width: '500px',
+    });
+
+    dialogRef.afterClosed().subscribe((result: any) => {
+      if (result && result.name) {
+        this.isLoading = true;
+        
+        // Actually create the group via API
+        this.groupService.createGroupAdmin(result.name, result.countryCode).subscribe({
+          next: (createdGroup: Group) => {
+            handleSuccessSnackbar(this._snackBar, `Group "${createdGroup.name}" created successfully!`);
+            // Auto-expand the newly created group so admin can add members immediately
+            this.expandedGroupIds.add(createdGroup.id);
+            this.loadGroups(); // Refresh the tree to show the new group
+          },
+          error: (err: any) => {
+            console.error('Error creating group:', err);
+            handleErrorSnackbar(this._snackBar, err, 'Failed to create group');
+            this.isLoading = false;
+          },
+        });
+      }
+    });
+  }
+
+  openAddUserToGroupDialog(member: GroupMember): void {
+    // Create a temporary user object for the dialog
+    const tempUser: any = {
+      id: member.userId,
+      email: member.email,
+      name: member.name,
+    };
+    
+    const dialogRef = this.dialog.open(AddMemberDialogComponent, {
+      width: '500px',
+      data: {preselectedUser: tempUser},
+    });
+
+    dialogRef.afterClosed().subscribe((result: any) => {
+      if (result) {
+        handleSuccessSnackbar(
+          this._snackBar,
+          'User added to group successfully!',
+        );
+        this.loadGroups(); // Refresh the tree
+      }
+    });
+  }
+
+  openAddUserDialog(): void {
+    const dialogRef = this.dialog.open(AddUserDialogComponent, {
+      width: '500px',
+      data: {groups: this.groups},
+    });
+
+    dialogRef.afterClosed().subscribe((result: AddUserDialogResult | undefined) => {
+      if (result) {
+        this.isLoading = true;
+        this.groupService
+          .addUserToGroupByEmail(result.groupId, result.email)
+          .subscribe({
+            next: () => {
+              handleSuccessSnackbar(this._snackBar, 'User added to group successfully!');
+              this.loadGroups();
+            },
+            error: err => {
+              this.isLoading = false;
+              handleErrorSnackbar(this._snackBar, err, 'Add user to group');
+            },
+          });
+      }
+    });
   }
 }

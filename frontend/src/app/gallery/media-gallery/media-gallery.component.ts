@@ -40,14 +40,12 @@ import {Subscription, fromEvent, forkJoin, of} from 'rxjs';
 import {debounceTime, map, switchMap} from 'rxjs/operators';
 import {MediaItemSelection} from '../../common/components/image-selector/image-selector.component';
 import {CopyToWorkspaceDialogComponent} from '../../common/components/copy-to-workspace-dialog/copy-to-workspace-dialog.component';
+import {ShareToGroupDialogComponent} from '../../common/components/share-to-group-dialog/share-to-group-dialog.component';
 import {DropdownOption} from '../../common/components/studio-dropdown/studio-dropdown.component';
 import {MODEL_CONFIGS} from '../../common/config/model-config';
 import {JobStatus, MediaItem} from '../../common/models/media-item.model';
 import {GalleryItem} from '../../common/models/gallery-item.model';
-import {
-  GalleryFiltersState,
-  GallerySearchDto,
-} from '../../common/models/search.model';
+import {GallerySearchDto} from '../../common/models/search.model';
 import {UserService} from '../../common/services/user.service';
 import {GalleryService} from '../gallery.service';
 import {WorkspaceStateService} from '../../services/workspace/workspace-state.service';
@@ -56,11 +54,13 @@ import {AssignTagsDialogComponent} from '../../common/components/assign-tags-dia
 import {UserRolesEnum} from '../../common/models/user.model';
 import {TagsManagementDialogComponent} from '../../common/components/tags-management-dialog/tags-management-dialog.component';
 import {ConfirmationDialogComponent} from '../../common/components/confirmation-dialog/confirmation-dialog.component';
+import {GroupService} from '../../services/group/group.service';
 
 @Component({
   selector: 'app-media-gallery',
   templateUrl: './media-gallery.component.html',
   styleUrl: './media-gallery.component.scss',
+  providers: [GalleryService],
   animations: [
     trigger('fadeSlideInOut', [
       transition(':enter', [
@@ -120,6 +120,7 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
   public isDeleting = false;
   public isDownloading = false;
   public isCopying = false;
+  public isSharingToGroup = false;
   public showAdvancedFilters = false;
 
   toggleAdvancedFilters() {
@@ -230,6 +231,7 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
     private snackBar: MatSnackBar,
     public dialog: MatDialog,
     private tagsService: TagsService,
+    private groupService: GroupService,
     @Inject(PLATFORM_ID) platformId: Object,
   ) {
     this.isBrowser = isPlatformBrowser(platformId);
@@ -258,22 +260,7 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isAdmin = userDetails?.roles?.includes(UserRolesEnum.ADMIN) || false;
 
     this.mediaTypeFilter = this.filterByType || '';
-
-    if (!this.isSelectionMode && !this.isSelectorMode) {
-      const savedState = this.galleryService.filtersState;
-      if (savedState) {
-        this.queryFilter = savedState.query;
-        this.startDateFilter = savedState.startDate;
-        this.endDateFilter = savedState.endDate;
-        this.mediaTypeFilter = savedState.mimeType;
-        this.generationModelFilter = savedState.model;
-        this.assetTypeFilter = savedState.itemType;
-        this.tagsFilter = savedState.tags;
-        this.onlyMyMedia = savedState.onlyMyMedia;
-      }
-    }
-
-    this.searchTerm(); // Initial search with stored filters
+    this.searchTerm(); // Set initial filters
     this.loadingSubscription = this.galleryService.isLoading$.subscribe(
       loading => {
         this.isLoading = loading;
@@ -557,6 +544,50 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
       if (targetWorkspaceId) {
         this.performCopy(targetWorkspaceId);
       }
+    });
+  }
+
+  get selectedMediaItemIds(): number[] {
+    return Array.from(this.selectedItems)
+      .filter(selection => selection.startsWith('media_item:'))
+      .map(selection => parseInt(selection.split(':')[1], 10));
+  }
+
+  shareSelectedToGroup(): void {
+    const mediaItemIds = this.selectedMediaItemIds;
+    if (!mediaItemIds.length || this.isSharingToGroup) return;
+
+    const dialogRef = this.dialog.open(ShareToGroupDialogComponent, {
+      width: '450px',
+      data: {mediaItemIds},
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (!result) return;
+
+      this.isSharingToGroup = true;
+      this.groupService.shareItemsToGroup(result).subscribe({
+        next: response => {
+          this.snackBar.open(
+            `${response.item_count} item(s) moved to the group`,
+            'Close',
+            {duration: 3000},
+          );
+          this.selectedItems.clear();
+          this.lastSelectedIndex = null;
+          this.isSharingToGroup = false;
+          this.searchTerm();
+        },
+        error: err => {
+          console.error('Error moving items to group:', err);
+          this.snackBar.open(
+            'Failed to move items to the group',
+            'Close',
+            {duration: 3000},
+          );
+          this.isSharingToGroup = false;
+        },
+      });
     });
   }
 
@@ -882,19 +913,6 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.tagsFilter.length > 0) {
       filters['tags'] = this.tagsFilter;
-    }
-    if (!this.isSelectionMode && !this.isSelectorMode) {
-      const state: GalleryFiltersState = {
-        query: this.queryFilter,
-        startDate: this.startDateFilter,
-        endDate: this.endDateFilter,
-        mimeType: this.mediaTypeFilter,
-        model: this.generationModelFilter,
-        itemType: this.assetTypeFilter,
-        tags: this.tagsFilter,
-        onlyMyMedia: this.onlyMyMedia,
-      };
-      this.galleryService.setFiltersState(state);
     }
     this.galleryService.setFilters(filters);
   }

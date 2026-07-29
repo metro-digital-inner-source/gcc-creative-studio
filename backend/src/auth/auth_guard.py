@@ -59,7 +59,11 @@ async def get_current_user(
     request: Request,
     user_service: UserService = Depends(UserService),
 ) -> UserModel:
-    """Authenticate via IAP JWT (deployed) or local identity header."""
+    """Authenticate via IAP JWT (deployed) or local identity header.
+
+    Strict allowlist (match test): only users already provisioned by an admin
+    may log in. Auto-create on first login is disabled.
+    """
     try:
         email = ""
         name = ""
@@ -119,16 +123,23 @@ async def get_current_user(
                     ),
                 )
 
-        user_doc = await user_service.create_user_if_not_exists(
-            email=email,
-            name=name,
-            picture=picture,
+        # Strict Allowlist: Only users explicitly added by admin can login.
+        user_doc = await user_service.user_repo.get_by_email(
+            email, include_deleted=False
         )
 
         if not user_doc:
+            logger.warning(
+                "Login attempt by unauthorized user: %s. "
+                "User must be added by admin first.",
+                email,
+            )
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Could not create or retrieve user profile.",
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Access denied. Your account has not been provisioned. "
+                    "Please contact an administrator to request access."
+                ),
             )
 
         if not user_doc.picture and picture:
@@ -139,6 +150,11 @@ async def get_current_user(
                     user_doc.id, {"picture": picture}
                 )
 
+        logger.info(
+            "User authenticated successfully: %s (ID: %s)",
+            email,
+            user_doc.id,
+        )
         return user_doc
 
     except HTTPException:
@@ -160,8 +176,17 @@ class RoleChecker:
     It depends on `get_current_user` to ensure the user is authenticated first.
     """
 
-    def __init__(self, allowed_roles: list[UserRoleEnum]):
+    def __init__(
+        self,
+        allowed_roles: list[UserRoleEnum],
+        allowed_emails: set[str] | None = None,
+    ):
         self.allowed_roles = allowed_roles
+        self.allowed_emails = {
+            email.strip().lower()
+            for email in (allowed_emails or set())
+            if email.strip()
+        }
 
     def __call__(self, user: UserModel = Depends(get_current_user)):
         """Checks the user's roles against the allowed roles."""
@@ -175,3 +200,14 @@ class RoleChecker:
                     "action."
                 ),
             )
+
+        if self.allowed_emails:
+            user_email = user.email.strip().lower()
+            if user_email not in self.allowed_emails:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "You do not have sufficient permissions to "
+                        "perform this action."
+                    ),
+                )
