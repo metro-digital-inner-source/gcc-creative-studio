@@ -501,35 +501,58 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.selectedItems.has(`${item.itemType}:${item.id}`);
   }
 
-  deleteSelected(): void {
-    if (this.selectedItems.size === 0 || this.isDeleting) return;
-    const itemsToDelete = Array.from(this.selectedItems).map(id => {
-      const [type, itemId] = id.split(':');
-      return {id: parseInt(itemId), type};
-    });
+  deleteItem(payload: {item: GalleryItem; imageIndex: number}): void {
+    if (this.isDeleting) return;
+    const {item, imageIndex} = payload;
+    const imageCount = item.presignedUrls?.length || item.gcsUris?.length || 1;
 
-    if (
-      confirm(`Are you sure you want to delete ${itemsToDelete.length} items?`)
-    ) {
-      this.isDeleting = true;
-      const workspaceId =
-        this.workspaceStateService.getActiveWorkspaceId() || 0;
-      this.galleryService.bulkDelete(itemsToDelete, workspaceId).subscribe({
+    const message =
+      imageCount > 1
+        ? 'Delete only this image from the set? Other images in this generation will stay.'
+        : 'Are you sure you want to delete this item?';
+
+    if (!confirm(message)) {
+      return;
+    }
+
+    this.isDeleting = true;
+    const workspaceId = this.workspaceStateService.getActiveWorkspaceId() || 0;
+    this.galleryService
+      .bulkDelete(
+        [
+          {
+            id: item.id,
+            type: item.itemType,
+            imageIndex: imageCount > 1 ? imageIndex : null,
+          },
+        ],
+        workspaceId,
+      )
+      .subscribe({
         next: () => {
-          // Remove deleted items from local state
-          this.images = this.images.filter(
-            img => !this.selectedItems.has(`${img.itemType}:${img.id}`),
-          );
-          this.selectedItems.clear();
-          this.updateGroups();
+          if (imageCount > 1) {
+            // Reload gallery so remaining images in the set refresh correctly.
+            this.searchTerm();
+          } else {
+            this.images = this.images.filter(
+              img => !(img.itemType === item.itemType && img.id === item.id),
+            );
+            this.selectedItems.delete(`${item.itemType}:${item.id}`);
+            this.updateGroups();
+          }
           this.isDeleting = false;
+          this.snackBar.open('Image deleted successfully', 'Close', {
+            duration: 3000,
+          });
         },
         error: err => {
-          console.error('Error deleting items:', err);
+          console.error('Error deleting item:', err);
+          this.snackBar.open('Failed to delete item', 'Close', {
+            duration: 3000,
+          });
           this.isDeleting = false;
         },
       });
-    }
   }
 
   copySelected(): void {
@@ -547,19 +570,12 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  get selectedMediaItemIds(): number[] {
-    return Array.from(this.selectedItems)
-      .filter(selection => selection.startsWith('media_item:'))
-      .map(selection => parseInt(selection.split(':')[1], 10));
-  }
-
-  shareSelectedToGroup(): void {
-    const mediaItemIds = this.selectedMediaItemIds;
-    if (!mediaItemIds.length || this.isSharingToGroup) return;
+  shareItemToGroup(item: GalleryItem): void {
+    if (item.itemType !== 'media_item' || this.isSharingToGroup) return;
 
     const dialogRef = this.dialog.open(ShareToGroupDialogComponent, {
       width: '450px',
-      data: {mediaItemIds},
+      data: {mediaItemIds: [item.id]},
     });
 
     dialogRef.afterClosed().subscribe(result => {
@@ -569,12 +585,11 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
       this.groupService.shareItemsToGroup(result).subscribe({
         next: response => {
           this.snackBar.open(
-            `${response.item_count} item(s) moved to the group`,
+            `${response.item_count} item(s) shared to Group Gallery`,
             'Close',
             {duration: 3000},
           );
-          this.selectedItems.clear();
-          this.lastSelectedIndex = null;
+          this.selectedItems.delete(`${item.itemType}:${item.id}`);
           this.isSharingToGroup = false;
           this.searchTerm();
         },

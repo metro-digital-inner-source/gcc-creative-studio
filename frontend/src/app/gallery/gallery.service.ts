@@ -338,12 +338,16 @@ export class GalleryService implements OnDestroy {
   }
 
   bulkDelete(
-    items: {id: number; type: string}[],
+    items: {id: number; type: string; imageIndex?: number | null}[],
     workspaceId: number,
   ): Observable<{deleted_count: number}> {
     const url = `${environment.backendURL}/gallery/bulk-delete`;
     return this.http.post<{deleted_count: number}>(url, {
-      items,
+      items: items.map(item => ({
+        id: item.id,
+        type: item.type,
+        image_index: item.imageIndex ?? null,
+      })),
       workspace_id: workspaceId,
     });
   }

@@ -27,9 +27,12 @@ export interface ShareToGroupDialogData {
 @Component({
   selector: 'app-share-to-group-dialog',
   template: `
-    <h2 mat-dialog-title>Share to Group</h2>
+    <h2 mat-dialog-title>Share to Group Gallery</h2>
     <mat-dialog-content>
-      <p>Select a group to share {{ data.mediaItemIds.length }} item(s) to:</p>
+      <p>
+        Move {{ data.mediaItemIds.length }} item(s) to a group gallery.
+        They will leave your personal workspace and appear under Groups.
+      </p>
 
       <div *ngIf="isLoadingGroups" class="loading-container">
         <mat-spinner diameter="40"></mat-spinner>
@@ -63,7 +66,7 @@ export interface ShareToGroupDialogData {
         (click)="onSubmit()"
         [disabled]="form.invalid || groups.length === 0"
       >
-        Share
+        Share to Gallery
       </button>
     </mat-dialog-actions>
   `,

@@ -53,7 +53,7 @@ export class MediaLightboxComponent
   @Input() mediaItem: MediaItem | GalleryItem | undefined;
   @Input() initialIndex = 0;
   @Input() showSeeMoreInfoButton = false;
-  @Input() showShareButton = true;
+  @Input() showShareButton = false;
   @Input() showDownloadButton = true;
   @Input() showDeleteButton = false;
 

@@ -39,6 +39,7 @@ export class GroupGalleryComponent implements OnInit {
   selectedItems: Set<string> = new Set();
   isLoading = true;
   isRestoring = false;
+  isDeleting = false;
   allImagesLoaded = false;
 
   private imagesSubscription: Subscription | undefined;
@@ -159,7 +160,7 @@ export class GroupGalleryComponent implements OnInit {
 
   restoreSelected(): void {
     const mediaItemIds = this.selectedMediaItemIds;
-    if (!mediaItemIds.length || this.isRestoring) return;
+    if (!mediaItemIds.length || this.isRestoring || this.isDeleting) return;
 
     if (
       !confirm(
@@ -192,6 +193,62 @@ export class GroupGalleryComponent implements OnInit {
         this.isRestoring = false;
       },
     });
+  }
+
+  deleteItem(payload: {item: GalleryItem; imageIndex: number}): void {
+    if (this.isDeleting || this.isRestoring) return;
+    const {item, imageIndex} = payload;
+    const imageCount = item.presignedUrls?.length || 1;
+
+    const message =
+      imageCount > 1
+        ? 'Delete only this image from the set? Other images in this generation will stay.'
+        : 'Are you sure you want to delete this item? This removes it permanently from the shared gallery.';
+
+    if (!confirm(message)) {
+      return;
+    }
+
+    this.isDeleting = true;
+    const workspaceId =
+      this.selectedGroup?.sharedWorkspaceId ||
+      this.workspaceStateService.getActiveWorkspaceId() ||
+      0;
+
+    this.galleryService
+      .bulkDelete(
+        [
+          {
+            id: item.id,
+            type: item.itemType,
+            imageIndex: imageCount > 1 ? imageIndex : null,
+          },
+        ],
+        workspaceId,
+      )
+      .subscribe({
+        next: () => {
+          this.snackBar.open('Image deleted successfully', 'Close', {
+            duration: 3000,
+          });
+          if (imageCount > 1 && this.selectedGroup) {
+            this.selectGroup(this.selectedGroup);
+          } else {
+            this.images = this.images.filter(
+              img => !(img.itemType === item.itemType && img.id === item.id),
+            );
+            this.selectedItems.delete(`${item.itemType}:${item.id}`);
+          }
+          this.isDeleting = false;
+        },
+        error: err => {
+          console.error('Error deleting item:', err);
+          this.snackBar.open('Failed to delete item', 'Close', {
+            duration: 3000,
+          });
+          this.isDeleting = false;
+        },
+      });
   }
 
   loadMore(): void {

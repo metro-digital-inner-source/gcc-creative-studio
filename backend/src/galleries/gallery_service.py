@@ -386,7 +386,12 @@ class GalleryService:
         bulk_delete_dto: BulkDeleteDto,
         current_user: UserModel,
     ) -> dict[str, int]:
-        """Deletes multiple gallery items after authorizing the workspace access."""
+        """Deletes gallery items after authorizing workspace access.
+
+        For media_item entries with image_index, only that image within the
+        generation set is removed. The whole media item is soft-deleted when
+        it is the last remaining image (or when image_index is omitted).
+        """
         # 1. Authorize workspace access
         await self.workspace_auth.authorize(
             workspace_id=bulk_delete_dto.workspace_id,
@@ -417,11 +422,13 @@ class GalleryService:
                         )
                         continue
 
-                    await self.media_repo.soft_delete(
-                        item.id,
+                    removed = await self._delete_media_item_or_image(
+                        media_item=media_item,
+                        image_index=item.image_index,
                         deleted_by=current_user.id,
                     )
-                    deleted_count += 1
+                    if removed:
+                        deleted_count += 1
                 elif item.type == "source_asset":
                     asset = await self.source_asset_repo.get_by_id(item.id)
                     if not asset:
@@ -452,6 +459,59 @@ class GalleryService:
                 logger.error(f"Error deleting {item.type} {item.id}: {e}")
 
         return {"deleted_count": deleted_count}
+
+    async def _delete_media_item_or_image(
+        self,
+        media_item,
+        image_index: int | None,
+        deleted_by: int,
+    ) -> bool:
+        """Soft-delete whole item, or remove one image from a multi-image set."""
+        gcs_uris = list(media_item.gcs_uris or [])
+
+        # No index / single image / empty → delete the whole media item.
+        if (
+            image_index is None
+            or len(gcs_uris) <= 1
+            or image_index < 0
+            or image_index >= len(gcs_uris)
+        ):
+            if image_index is not None and len(gcs_uris) > 1 and (
+                image_index < 0 or image_index >= len(gcs_uris)
+            ):
+                logger.warning(
+                    "Invalid image_index %s for media_item %s (uris=%s)",
+                    image_index,
+                    media_item.id,
+                    len(gcs_uris),
+                )
+                return False
+            return await self.media_repo.soft_delete(
+                media_item.id,
+                deleted_by=deleted_by,
+            )
+
+        gcs_uris.pop(image_index)
+
+        thumbnail_uris = list(media_item.thumbnail_uris or [])
+        if image_index < len(thumbnail_uris):
+            thumbnail_uris.pop(image_index)
+
+        update_data: dict = {
+            "gcs_uris": gcs_uris,
+            "thumbnail_uris": thumbnail_uris,
+            "num_media": len(gcs_uris),
+        }
+
+        original_gcs_uris = media_item.original_gcs_uris
+        if original_gcs_uris is not None:
+            originals = list(original_gcs_uris)
+            if image_index < len(originals):
+                originals.pop(image_index)
+            update_data["original_gcs_uris"] = originals
+
+        updated = await self.media_repo.update(media_item.id, update_data)
+        return updated is not None
 
     async def restore_item(
         self,
