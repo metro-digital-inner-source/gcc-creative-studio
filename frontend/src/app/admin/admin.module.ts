@@ -36,26 +36,12 @@ import {UserFormComponent} from './users-management/user-form.component';
 import {MatDialogModule} from '@angular/material/dialog';
 import {MatSnackBarModule} from '@angular/material/snack-bar';
 import {MatChipsModule} from '@angular/material/chips';
-import {MatExpansionModule} from '@angular/material/expansion';
-import {MatTabsModule} from '@angular/material/tabs';
 import {MatSelectModule} from '@angular/material/select';
-import {MatMenuModule} from '@angular/material/menu';
-import {MatDividerModule} from '@angular/material/divider';
-import {MatStepperModule} from '@angular/material/stepper';
-import {MatCheckboxModule} from '@angular/material/checkbox';
-import {MatCardModule} from '@angular/material/card';
-import {ScrollingModule} from '@angular/cdk/scrolling';
-import {MatProgressBarModule} from '@angular/material/progress-bar';
-import {MatDatepickerModule} from '@angular/material/datepicker';
-import {MatNativeDateModule} from '@angular/material/core';
 import {SharedModule} from '../common/shared.module';
 import {AdminHomeComponent} from './admin-home/admin-home.component';
-import {GroupsManagementComponent} from './groups-management/groups-management.component';
-import {CreateGroupDialogComponent} from './groups-management/create-group-dialog/create-group-dialog.component';
-import {AddMemberDialogComponent} from './groups-management/add-member-dialog/add-member-dialog.component';
 import {AdminDeprecatedModule} from './admin-deprecated.module';
-import {AdminGroupAnalyticsComponent} from './admin-group-analytics/admin-group-analytics.component';
 import {AddUserDialogComponent} from './users-management/add-user-dialog.component';
+import {CreateTeamWorkspaceDialogComponent} from './users-management/create-team-workspace-dialog.component';
 
 @NgModule({
   declarations: [
@@ -63,11 +49,8 @@ import {AddUserDialogComponent} from './users-management/add-user-dialog.compone
     UsersManagementComponent,
     UserFormComponent,
     AdminHomeComponent,
-    GroupsManagementComponent,
-    CreateGroupDialogComponent,
-    AddMemberDialogComponent,
-    AdminGroupAnalyticsComponent,
     AddUserDialogComponent,
+    CreateTeamWorkspaceDialogComponent,
   ],
   imports: [
     CommonModule,
@@ -82,27 +65,16 @@ import {AddUserDialogComponent} from './users-management/add-user-dialog.compone
     MatSnackBarModule,
     MatTooltipModule,
     MatToolbarModule,
-    MatDividerModule,
     MatButtonModule,
     MatChipsModule,
     MatIconModule,
-    MatStepperModule,
     MatFormFieldModule,
     MatInputModule,
     ReactiveFormsModule,
     MatSelectModule,
     MatProgressSpinnerModule,
-    MatMenuModule,
-    MatCheckboxModule,
-    MatCardModule,
     MatTableModule,
     FormsModule,
-    ScrollingModule,
-    MatProgressBarModule,
-    MatExpansionModule,
-    MatTabsModule,
-    MatDatepickerModule,
-    MatNativeDateModule,
   ],
 })
 export class AdminModule {}

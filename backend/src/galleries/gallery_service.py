@@ -723,11 +723,13 @@ class GalleryService:
                             "deleted_at",
                             "deleted_by",
                             "workspace_id",
+                            "source_media_item_id",
                         },
                     )
                     new_item_data["workspace_id"] = (
                         bulk_copy_dto.target_workspace_id
                     )
+                    new_item_data["source_media_item_id"] = media_item.id
 
                     # Ensure user_id and user_email are set to the current user copying
                     new_item_data["user_id"] = current_user.id

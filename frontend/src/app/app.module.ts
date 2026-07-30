@@ -74,7 +74,6 @@ import {FooterComponent} from './footer/footer.component';
 import {FunTemplatesComponent} from './fun-templates/fun-templates.component';
 import {MediaDetailComponent} from './gallery/media-detail/media-detail.component';
 import {MediaGalleryComponent} from './gallery/media-gallery/media-gallery.component';
-import {GroupGalleryComponent} from './gallery/group-gallery/group-gallery.component';
 import {HeaderComponent} from './header/header.component';
 import {HomeComponent} from './home/home.component';
 import {LoginComponent} from './login/login.component';
@@ -105,7 +104,6 @@ import {UpscaleComponent} from './upscale/upscale.component';
     FunTemplatesComponent,
     VideoComponent,
     MediaGalleryComponent,
-    GroupGalleryComponent,
     AssignTagsDialogComponent,
     MediaDetailComponent,
     MediaLightboxComponent,

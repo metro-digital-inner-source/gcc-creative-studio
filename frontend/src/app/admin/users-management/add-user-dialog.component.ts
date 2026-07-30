@@ -17,15 +17,15 @@
 import {Component, Inject} from '@angular/core';
 import {FormBuilder, Validators} from '@angular/forms';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
-import {Group} from '../../common/models/group.model';
+import {Workspace} from '../../common/models/workspace.model';
 
 export interface AddUserDialogData {
-  groups: Group[];
+  workspaces: Workspace[];
 }
 
 export interface AddUserDialogResult {
   email: string;
-  groupId: number;
+  workspaceId: number;
 }
 
 @Component({
@@ -47,19 +47,22 @@ export interface AddUserDialogResult {
         </mat-form-field>
 
         <mat-form-field appearance="outline">
-          <mat-label>Group</mat-label>
-          <mat-select formControlName="groupId">
-            <mat-option *ngFor="let group of data.groups" [value]="group.id">
-              {{ group.name }}
+          <mat-label>Team Workspace</mat-label>
+          <mat-select formControlName="workspaceId">
+            <mat-option
+              *ngFor="let workspace of data.workspaces"
+              [value]="workspace.id"
+            >
+              {{ workspace.name }}
             </mat-option>
           </mat-select>
-          <mat-error *ngIf="form.get('groupId')?.hasError('required')">
-            Group is required
+          <mat-error *ngIf="form.get('workspaceId')?.hasError('required')">
+            Workspace is required
           </mat-error>
         </mat-form-field>
 
         <p class="text-sm text-gray-400 mt-2">
-          User will be added as a member with their own private workspace in this group.
+          User will be added to the team workspace and receive a personal workspace.
         </p>
       </div>
 
@@ -82,7 +85,7 @@ export class AddUserDialogComponent {
   ) {
     this.form = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
-      groupId: [null as number | null, Validators.required],
+      workspaceId: [null as number | null, Validators.required],
     });
   }
 
@@ -95,7 +98,7 @@ export class AddUserDialogComponent {
     const value = this.form.getRawValue();
     this.dialogRef.close({
       email: (value.email || '').trim().toLowerCase(),
-      groupId: Number(value.groupId),
+      workspaceId: Number(value.workspaceId),
     } as AddUserDialogResult);
   }
 }

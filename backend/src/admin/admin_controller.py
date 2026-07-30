@@ -144,98 +144,94 @@ async def cleanup_stuck_jobs(admin_service: AdminService = Depends()):
     return {"message": f"Cleaned up {count} stuck jobs", "count": count}
 
 
-# Group Management Endpoints
+# Group Management Endpoints replaced by Workspace Management
 
 
-@router.get("/groups")
-async def get_all_groups(admin_service: AdminService = Depends()):
-    """Retrieves all groups (admin view)."""
-    return await admin_service.get_all_groups()
+@router.get("/workspaces")
+async def get_all_workspaces(admin_service: AdminService = Depends()):
+    """Retrieves all workspaces with members (admin view)."""
+    return await admin_service.get_all_workspaces()
 
 
-@router.post("/groups")
-async def create_group_admin(
+@router.post("/workspaces")
+async def create_team_workspace_admin(
     name: str,
-    country_code: str | None = None,
     admin_service: AdminService = Depends(),
     current_user: UserModel = Depends(get_current_user),
 ):
-    """Creates a new group (admin action)."""
-    return await admin_service.create_group_admin(
-        name,
-        current_user,
-        country_code,
-    )
+    """Creates a new team workspace (admin action)."""
+    return await admin_service.create_team_workspace_admin(name, current_user)
 
 
-@router.post("/groups/{group_id}/users")
-async def add_user_to_group(
-    group_id: int,
+@router.post("/workspaces/{workspace_id}/users")
+async def add_user_to_workspace(
+    workspace_id: int,
     user_id: int,
-    role: str = "member",
+    role: str = "user",
     admin_service: AdminService = Depends(),
     current_user: UserModel = Depends(get_current_user),
 ):
-    """Adds a user to a group (admin action)."""
-    return await admin_service.add_user_to_group(
-        group_id, user_id, role, current_user
+    """Adds a user to a workspace (admin action)."""
+    return await admin_service.add_user_to_workspace(
+        workspace_id, user_id, role, current_user
     )
 
 
 @router.post(
-    "/groups/{group_id}/users/by-email",
+    "/workspaces/{workspace_id}/users/by-email",
     response_model=AddUserByEmailResponse,
 )
-async def add_user_to_group_by_email(
-    group_id: int,
+async def add_user_to_workspace_by_email(
+    workspace_id: int,
     request: AddUserByEmailRequest,
     admin_service: AdminService = Depends(),
     current_user: UserModel = Depends(get_current_user),
 ):
-    """Creates/gets a user by email and assigns them to a group as MEMBER.
-    User automatically gets their own private workspace.
-    """
-    return await admin_service.add_user_to_group_by_email(
-        group_id=group_id,
+    """Creates/gets a user by email and assigns them to a team workspace."""
+    return await admin_service.add_user_to_workspace_by_email(
+        workspace_id=workspace_id,
         email=request.email,
-        role="member",  # Always member
+        role="user",
         admin_user=current_user,
     )
 
 
-@router.delete("/groups/{group_id}")
-async def delete_group_admin(
-    group_id: int,
+@router.patch("/workspaces/{workspace_id}/users/{user_id}")
+async def update_workspace_member_role(
+    workspace_id: int,
+    user_id: int,
+    role: str,
     admin_service: AdminService = Depends(),
 ):
-    """Deletes a group and all its members (admin action)."""
-    deleted = await admin_service.delete_group_admin(group_id)
+    """Updates a workspace member's role (user or admin)."""
+    return await admin_service.update_workspace_member_role(
+        workspace_id, user_id, role
+    )
+
+
+@router.delete("/workspaces/{workspace_id}/users/{user_id}")
+async def remove_user_from_workspace(
+    workspace_id: int,
+    user_id: int,
+    admin_service: AdminService = Depends(),
+):
+    """Removes a user from a workspace (admin action)."""
+    return await admin_service.remove_user_from_workspace(workspace_id, user_id)
+
+
+@router.delete("/workspaces/{workspace_id}")
+async def delete_team_workspace_admin(
+    workspace_id: int,
+    admin_service: AdminService = Depends(),
+):
+    """Deletes a team workspace (admin action)."""
+    deleted = await admin_service.delete_team_workspace_admin(workspace_id)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Group {group_id} not found",
+            detail=f"Team workspace {workspace_id} not found",
         )
-    return {"message": f"Group {group_id} deleted successfully"}
-
-
-@router.get("/groups/usage-summary")
-async def get_group_usage_summary(
-    start_date: str | None = None,
-    end_date: str | None = None,
-    admin_service: AdminService = Depends(),
-):
-    """Retrieves aggregate usage summary across all groups."""
-    return await admin_service.get_group_usage_summary(start_date, end_date)
-
-
-@router.get("/groups/usage-breakdown")
-async def get_group_usage_breakdown(
-    start_date: str | None = None,
-    end_date: str | None = None,
-    admin_service: AdminService = Depends(),
-):
-    """Retrieves per-group usage breakdown."""
-    return await admin_service.get_group_usage_breakdown(start_date, end_date)
+    return {"message": f"Workspace {workspace_id} deleted successfully"}
 
 
 @router.post("/dev/reset-database")

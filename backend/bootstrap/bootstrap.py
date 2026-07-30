@@ -51,21 +51,13 @@ from src.source_assets.schema.source_asset_model import (
 )
 from src.source_assets.schema.source_asset_model import SourceAssetModel
 from src.common.email_service import EmailService
-from src.groups.group_service import GroupService
-from src.groups.repository.group_repository import GroupRepository
 from src.images.repository.media_item_repository import MediaRepository
 from src.users.dto.user_create_dto import UserCreateDto
 from src.users.repository.user_repository import UserRepository
 from src.users.user_model import UserModel, UserRoleEnum
 from src.workspaces.dto.create_workspace_dto import CreateWorkspaceDto
 from src.workspaces.repository.workspace_repository import WorkspaceRepository
-from src.workspaces.schema.workspace_model import (
-    WorkspaceMember,
-    WorkspaceModel,
-    WorkspaceRoleEnum,
-    WorkspaceScopeEnum,
-)
-from src.workspaces.workspace_auth_guard import WorkspaceAuth
+from src.workspaces.schema.workspace_model import WorkspaceModel, WorkspaceTypeEnum
 from src.workspaces.workspace_service import WorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -112,32 +104,12 @@ def _has_admin_role(roles: list[UserRoleEnum | str]) -> bool:
     )
 
 
-def build_group_service(db: AsyncSession) -> GroupService:
-    """Constructs GroupService outside FastAPI dependency injection."""
-    workspace_repo = WorkspaceRepository(db)
-    user_repo = UserRepository(db)
-    group_repo = GroupRepository(db)
-    workspace_service = WorkspaceService(
-        workspace_repo=workspace_repo,
-        user_repo=user_repo,
-        group_repo=group_repo,
-        email_service=EmailService(),
-    )
-    return GroupService(
-        group_repo=group_repo,
-        workspace_service=workspace_service,
-        media_repo=MediaRepository(db),
-        workspace_auth=WorkspaceAuth(workspace_repo=workspace_repo),
-    )
-
-
 def build_workspace_service(db: AsyncSession) -> WorkspaceService:
     """Constructs WorkspaceService outside FastAPI dependency injection."""
     workspace_repo = WorkspaceRepository(db)
     return WorkspaceService(
         workspace_repo=workspace_repo,
         user_repo=UserRepository(db),
-        group_repo=GroupRepository(db),
         email_service=EmailService(),
     )
 
@@ -163,73 +135,61 @@ async def ensure_admin_user_has_admin_role(
     return await user_repo.update(admin_user.id, {"roles": updated_roles})
 
 
-async def ensure_personal_private_workspace(
+async def ensure_personal_workspace(
     db: AsyncSession,
     admin_user: UserModel,
 ) -> None:
-    """Ensures the bootstrap admin has an email-named private workspace."""
+    """Ensures the bootstrap admin has a personal workspace."""
     workspace_service = build_workspace_service(db)
-    personal_ws_name = admin_user.email.strip().lower()
-    personal_workspace = await workspace_service.workspace_repo.find_by_name(
-        personal_ws_name
-    )
-
-    if not personal_workspace:
-        personal_dto = CreateWorkspaceDto(
-            name=personal_ws_name,
-            scope=WorkspaceScopeEnum.PRIVATE,
-        )
-        personal_workspace = await workspace_service.create_workspace(
-            admin_user,
-            personal_dto,
-        )
-        logger.info(
-            "Created personal workspace '%s' (ID: %s) for bootstrap admin.",
-            personal_ws_name,
-            personal_workspace.id,
-        )
-        return
-
-    is_member = await workspace_service.workspace_repo.is_member(
-        personal_workspace.id,
-        admin_user.id,
-    )
-    if is_member:
-        logger.info(
-            "Bootstrap admin already has personal workspace '%s'.",
-            personal_ws_name,
-        )
-        return
-
-    member_role = (
-        WorkspaceRoleEnum.OWNER
-        if personal_workspace.owner_id == admin_user.id
-        else WorkspaceRoleEnum.EDITOR
-    )
+    await workspace_service.ensure_personal_workspace(admin_user)
     logger.info(
-        "Adding bootstrap admin to existing personal workspace '%s'.",
-        personal_ws_name,
+        "Bootstrap admin personal workspace ensured for '%s'.",
+        admin_user.email,
     )
-    await workspace_service.workspace_repo.add_member_to_workspace(
-        personal_workspace.id,
-        WorkspaceMember(
-            user_id=admin_user.id,
-            email=admin_user.email,
-            role=member_role,
-        ),
-        admin_user.id,
-    )
+
+
+async def ensure_default_team_workspace_exists(
+    db: AsyncSession,
+    admin_user: UserModel | None,
+):
+    """Checks if a default team workspace exists and creates one if needed."""
+    try:
+        logger.info("Checking for default team workspace...")
+        workspace_repo = WorkspaceRepository(db)
+        if not await workspace_repo.get_system_team_workspace():
+            logger.warning("No team workspace found. Creating a default one.")
+            if not admin_user:
+                logger.error(
+                    "Cannot create default team workspace without an admin user."
+                )
+                return
+
+            project_id = config_service.PROJECT_ID
+            workspace_name = (
+                project_id.replace("-", " ").replace("_", " ").title()
+                + " Workspace"
+            )
+
+            default_workspace = WorkspaceModel(
+                name=workspace_name,
+                owner_id=admin_user.id,
+                type=WorkspaceTypeEnum.TEAM,
+            )
+            await workspace_repo.create(default_workspace)
+            logger.info(
+                f"Default team '{workspace_name}' created successfully."
+            )
+    except Exception as e:
+        logger.error(
+            f"Failed to ensure default team workspace exists: {e}", exc_info=True
+        )
 
 
 async def ensure_bootstrap_admin_workspaces(
     db: AsyncSession,
     admin_user: UserModel | None,
 ) -> None:
-    """Provisions group + workspace access for the bootstrap admin.
-
-    Mirrors admin UI provisioning so first login works on a fresh database
-    without JIT auth or manual SQL.
-    """
+    """Provisions workspace access for the bootstrap admin."""
     if not admin_user:
         logger.warning(
             "Skipping bootstrap admin workspace provisioning: no admin user."
@@ -238,24 +198,7 @@ async def ensure_bootstrap_admin_workspaces(
 
     logger.info("--- Ensuring Bootstrap Admin Workspaces ---")
     admin_user = await ensure_admin_user_has_admin_role(db, admin_user)
-    group_service = build_group_service(db)
-
-    try:
-        group = await group_service.ensure_admin_access_to_ai_enabler(admin_user)
-        if group:
-            logger.info(
-                "Bootstrap admin provisioned for AI Enabler group (ID: %s).",
-                group.id,
-            )
-    except Exception as exc:
-        logger.error(
-            "Failed to provision AI Enabler access for bootstrap admin: %s",
-            exc,
-            exc_info=True,
-        )
-        raise
-
-    await ensure_personal_private_workspace(db, admin_user)
+    await ensure_personal_workspace(db, admin_user)
 
 
 async def ensure_admin_user_exists(db: AsyncSession) -> UserModel | None:
@@ -333,46 +276,6 @@ async def ensure_admin_user_exists(db: AsyncSession) -> UserModel | None:
             )
 
     return primary_user
-
-
-async def ensure_default_workspace_exists(
-    db: AsyncSession,
-    admin_user: UserModel | None,
-):
-    """Checks if a public workspace exists and creates one if it doesn't."""
-    try:
-        logger.info("Checking for default public workspace...")
-        workspace_repo = WorkspaceRepository(db)
-        if not await workspace_repo.get_public_workspace():
-            logger.warning("No public workspace found. Creating a default one.")
-            project_id = config_service.PROJECT_ID
-            workspace_name = (
-                project_id.replace("-", " ").replace("_", " ").title()
-                + " Workspace"
-            )
-
-            # We need an owner_id. If admin_user is None (e.g. system), we might have an issue.
-            # But for now we assume admin_user is present if we are running this.
-            if not admin_user:
-                logger.error(
-                    "Cannot create default workspace without an admin user."
-                )
-                return
-
-            default_workspace = WorkspaceModel(
-                name=workspace_name,
-                owner_id=admin_user.id,
-                scope=WorkspaceScopeEnum.PUBLIC,
-                members=[],
-            )
-            await workspace_repo.create(default_workspace)
-            logger.info(
-                f"Default public '{workspace_name}' created successfully."
-            )
-    except Exception as e:
-        logger.error(
-            f"Failed to ensure default workspace exists: {e}", exc_info=True
-        )
 
 
 def upload_assets_from_folder(
@@ -511,10 +414,10 @@ async def seed_media_templates(db: AsyncSession, admin_user: UserModel | None):
             )
             continue
 
-        public_workspace = await workspace_repo.get_public_workspace()
-        if not public_workspace:
+        team_workspace = await workspace_repo.get_system_team_workspace()
+        if not team_workspace:
             logger.error(
-                "Public workspace not found. Cannot create system assets for templates.",
+                "Team workspace not found. Cannot create system assets for templates.",
             )
             return
 
@@ -556,7 +459,7 @@ async def seed_media_templates(db: AsyncSession, admin_user: UserModel | None):
             else:
                 # If asset does not exist, create it and get the new ID.
                 new_asset = SourceAssetModel(
-                    workspace_id=public_workspace.id,
+                    workspace_id=team_workspace.id,
                     original_filename=local_uri,
                     gcs_uri=gcs_uri,
                     mime_type=mime_type,
@@ -607,9 +510,9 @@ async def seed_vto_assets(db: AsyncSession, admin_user: UserModel | None):
     logger.info("--- Starting VTO System Asset Seeding ---")
     asset_repo = SourceAssetRepository(db)
     workspace_repo = WorkspaceRepository(db)
-    public_workspace = await workspace_repo.get_public_workspace()
+    team_workspace = await workspace_repo.get_system_team_workspace()
 
-    if not public_workspace:
+    if not team_workspace:
         logger.error("Cannot seed VTO assets: Public workspace not found.")
         return
 
@@ -657,7 +560,7 @@ async def seed_vto_assets(db: AsyncSession, admin_user: UserModel | None):
 
             logger.info(f"Creating VTO asset for: {filename}")
             new_asset = SourceAssetModel(
-                workspace_id=public_workspace.id,
+                workspace_id=team_workspace.id,
                 original_filename=filename,
                 gcs_uri=gcs_uri,
                 mime_type=mime_type,  # type: ignore
@@ -680,7 +583,7 @@ async def main():
 
         async with async_session_local() as db:
             admin_user = await ensure_admin_user_exists(db)
-            await ensure_default_workspace_exists(db, admin_user)
+            await ensure_default_team_workspace_exists(db, admin_user)
             await ensure_bootstrap_admin_workspaces(db, admin_user)
             await seed_vto_assets(db, admin_user)
             await seed_media_templates(db, admin_user)

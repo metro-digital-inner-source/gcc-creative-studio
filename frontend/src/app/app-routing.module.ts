@@ -22,7 +22,6 @@ import {AuthGuardService} from './common/services/auth.guard.service';
 import {FunTemplatesComponent} from './fun-templates/fun-templates.component';
 import {MediaDetailComponent} from './gallery/media-detail/media-detail.component';
 import {MediaGalleryComponent} from './gallery/media-gallery/media-gallery.component';
-import {GroupGalleryComponent} from './gallery/group-gallery/group-gallery.component';
 import {HomeComponent} from './home/home.component';
 import {LoginComponent} from './login/login.component';
 import {VideoComponent} from './video/video.component';
@@ -54,12 +53,6 @@ const routes: Routes = [
   {
     path: 'gallery',
     component: MediaGalleryComponent,
-  },
-  // Group gallery for viewing group-shared media
-  {
-    path: 'groups',
-    component: GroupGalleryComponent,
-    canActivate: [AuthGuardService],
   },
   // When a user goes to '/gallery/some-unique-id', show the detail page.
   // The ':id' is a placeholder for the media item's ID.

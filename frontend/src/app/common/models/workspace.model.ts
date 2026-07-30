@@ -16,17 +16,16 @@
 
 import {WorkspaceMember} from './workspace-member.model';
 
-export enum WorkspaceScope {
-  PUBLIC = 'public',
-  PRIVATE = 'private',
-  GLOBAL = 'global',
+export enum WorkspaceType {
+  PERSONAL = 'personal',
+  TEAM = 'team',
 }
 
 export interface Workspace {
   id: number;
   name: string;
-  ownerId: string;
-  scope: WorkspaceScope;
+  ownerId: number;
+  type: WorkspaceType;
   members: WorkspaceMember[];
-  memberIds: string[];
+  memberIds?: string[];
 }

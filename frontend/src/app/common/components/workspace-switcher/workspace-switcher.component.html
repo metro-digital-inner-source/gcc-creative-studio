@@ -21,12 +21,12 @@
       [matMenuTriggerFor]="workspaceMenu"
       [matTooltip]="
         'You are on a ' +
-        (activeWorkspace?.scope ?? 'private') +
+        (activeWorkspace?.type ?? 'personal') +
         ' workspace. Click to switch workspaces!'
       "
     >
       <mat-icon>{{
-        activeWorkspace?.scope === WorkspaceScope.PUBLIC ? 'public' : 'lock'
+        activeWorkspace?.type === WorkspaceType.TEAM ? 'groups' : 'person'
       }}</mat-icon>
       <span class="workspace-name">{{
         activeWorkspace?.name || 'Select Workspace'
@@ -47,7 +47,7 @@
           >check</mat-icon
         >
         <mat-icon>{{
-          workspace.scope === WorkspaceScope.PUBLIC ? 'public' : 'lock'
+          workspace.type === WorkspaceType.TEAM ? 'groups' : 'person'
         }}</mat-icon>
         <span>{{ workspace.name }}</span>
       </button>

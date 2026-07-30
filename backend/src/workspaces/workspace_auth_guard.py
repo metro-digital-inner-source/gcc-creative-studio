@@ -17,10 +17,7 @@ from fastapi import Depends, HTTPException, status
 
 from src.users.user_model import UserModel, UserRoleEnum
 from src.workspaces.repository.workspace_repository import WorkspaceRepository
-from src.workspaces.schema.workspace_model import (
-    WorkspaceModel,
-    WorkspaceScopeEnum,
-)
+from src.workspaces.schema.workspace_model import WorkspaceModel
 
 
 class WorkspaceAuth:
@@ -34,25 +31,21 @@ class WorkspaceAuth:
         workspace_id: int,
         user: UserModel,
     ) -> WorkspaceModel:
-        """The core authorization logic. Checks if a user has rights to a workspace.
+        """Checks if a user has rights to a workspace.
 
-        Raises HTTPException if unauthorized.
-        Returns the WorkspaceModel if authorized.
+        System admins can access any workspace. Other users must be members.
         """
-        # Check scope first (efficient query)
-        scope = await self.workspace_repo.get_scope(workspace_id)
+        workspace_type = await self.workspace_repo.get_workspace_type(workspace_id)
 
-        if scope is None:
+        if workspace_type is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Workspace with ID '{workspace_id}' not found.",
             )
 
-        # Authorization checks
         is_admin = UserRoleEnum.ADMIN in user.roles
-        is_public = scope == WorkspaceScopeEnum.PUBLIC
 
-        if not (is_admin or is_public):
+        if not is_admin:
             is_member = await self.workspace_repo.is_member(
                 workspace_id, user.id
             )
@@ -62,10 +55,10 @@ class WorkspaceAuth:
                     detail="You do not have permission to access this workspace.",
                 )
 
-        # If authorized, return the full workspace object
-        return await self.workspace_repo.get_by_id(workspace_id)
-
-
-# Global instance removed. Use Depends(WorkspaceAuth) instead.
-# workspace_auth_service = WorkspaceAuth()
-# AuthorizedWorkspace = Annotated[WorkspaceModel, Depends(workspace_auth_service.authorize)]
+        workspace = await self.workspace_repo.get_by_id(workspace_id)
+        if not workspace:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Workspace with ID '{workspace_id}' not found.",
+            )
+        return workspace

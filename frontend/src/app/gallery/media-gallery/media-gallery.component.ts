@@ -40,7 +40,6 @@ import {Subscription, fromEvent, forkJoin, of} from 'rxjs';
 import {debounceTime, map, switchMap} from 'rxjs/operators';
 import {MediaItemSelection} from '../../common/components/image-selector/image-selector.component';
 import {CopyToWorkspaceDialogComponent} from '../../common/components/copy-to-workspace-dialog/copy-to-workspace-dialog.component';
-import {ShareToGroupDialogComponent} from '../../common/components/share-to-group-dialog/share-to-group-dialog.component';
 import {DropdownOption} from '../../common/components/studio-dropdown/studio-dropdown.component';
 import {MODEL_CONFIGS} from '../../common/config/model-config';
 import {JobStatus, MediaItem} from '../../common/models/media-item.model';
@@ -54,7 +53,8 @@ import {AssignTagsDialogComponent} from '../../common/components/assign-tags-dia
 import {UserRolesEnum} from '../../common/models/user.model';
 import {TagsManagementDialogComponent} from '../../common/components/tags-management-dialog/tags-management-dialog.component';
 import {ConfirmationDialogComponent} from '../../common/components/confirmation-dialog/confirmation-dialog.component';
-import {GroupService} from '../../services/group/group.service';
+import {Workspace, WorkspaceType} from '../../common/models/workspace.model';
+import {WorkspaceService} from '../../services/workspace/workspace.service';
 
 @Component({
   selector: 'app-media-gallery',
@@ -120,7 +120,7 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
   public isDeleting = false;
   public isDownloading = false;
   public isCopying = false;
-  public isSharingToGroup = false;
+  public isSharingToTeam = false;
   public showAdvancedFilters = false;
 
   toggleAdvancedFilters() {
@@ -231,7 +231,7 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
     private snackBar: MatSnackBar,
     public dialog: MatDialog,
     private tagsService: TagsService,
-    private groupService: GroupService,
+    private workspaceService: WorkspaceService,
     @Inject(PLATFORM_ID) platformId: Object,
   ) {
     this.isBrowser = isPlatformBrowser(platformId);
@@ -570,39 +570,41 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  shareItemToGroup(item: GalleryItem): void {
-    if (item.itemType !== 'media_item' || this.isSharingToGroup) return;
+  shareItemToTeam(item: GalleryItem): void {
+    if (item.itemType !== 'media_item' || this.isSharingToTeam) return;
 
-    const dialogRef = this.dialog.open(ShareToGroupDialogComponent, {
+    const dialogRef = this.dialog.open(CopyToWorkspaceDialogComponent, {
       width: '450px',
-      data: {mediaItemIds: [item.id]},
+      data: {itemCount: 1, teamWorkspacesOnly: true},
     });
 
-    dialogRef.afterClosed().subscribe(result => {
-      if (!result) return;
+    dialogRef.afterClosed().subscribe((targetWorkspaceId: number | null) => {
+      if (!targetWorkspaceId) return;
 
-      this.isSharingToGroup = true;
-      this.groupService.shareItemsToGroup(result).subscribe({
-        next: response => {
-          this.snackBar.open(
-            `${response.item_count} item(s) shared to Group Gallery`,
-            'Close',
-            {duration: 3000},
-          );
-          this.selectedItems.delete(`${item.itemType}:${item.id}`);
-          this.isSharingToGroup = false;
-          this.searchTerm();
-        },
-        error: err => {
-          console.error('Error moving items to group:', err);
-          this.snackBar.open(
-            'Failed to move items to the group',
-            'Close',
-            {duration: 3000},
-          );
-          this.isSharingToGroup = false;
-        },
-      });
+      this.isSharingToTeam = true;
+      this.galleryService
+        .bulkCopy([{id: item.id, type: 'media_item'}], targetWorkspaceId)
+        .subscribe({
+          next: result => {
+            this.snackBar.open(
+              `${result.copied_count} item(s) shared to team workspace`,
+              'Close',
+              {duration: 3000},
+            );
+            this.selectedItems.delete(`${item.itemType}:${item.id}`);
+            this.isSharingToTeam = false;
+            this.searchTerm();
+          },
+          error: err => {
+            console.error('Error sharing item to team workspace:', err);
+            this.snackBar.open(
+              'Failed to share item to team workspace',
+              'Close',
+              {duration: 3000},
+            );
+            this.isSharingToTeam = false;
+          },
+        });
     });
   }
 
