@@ -87,11 +87,12 @@ export class AuthService {
   async logout(route: string = LOGIN_ROUTE) {
     this.clearLocalSession();
 
-    if (!environment.isLocal && environment.iapClientId) {
-      const continueUrl = encodeURIComponent(window.location.origin);
+    if (!environment.isLocal) {
+      // IAP has no public :logout REST endpoint (that URL 404s). Clear the IAP
+      // session cookie via the app URL instead:
+      // https://cloud.google.com/iap/docs/special-urls-howto#clearing-user-login
       window.location.href =
-        `https://iap.googleapis.com/v1/oauth/clientIds/` +
-        `${environment.iapClientId}:logout?continue=${continueUrl}`;
+        `${window.location.origin}${route}?gcp-iap-mode=CLEAR_LOGIN_COOKIE`;
       return;
     }
 
