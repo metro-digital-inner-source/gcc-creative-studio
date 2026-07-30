@@ -14,7 +14,7 @@
 
 
 from fastapi import Depends
-from sqlalchemy import exists, select
+from sqlalchemy import delete, exists, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.common.base_repository import BaseRepository
@@ -24,6 +24,7 @@ from src.workspaces.schema.workspace_model import (
     WorkspaceMember,
     WorkspaceMemberAssociation,
     WorkspaceModel,
+    WorkspaceRoleEnum,
     WorkspaceTypeEnum,
 )
 
@@ -241,7 +242,7 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
         return self._map_to_schema(workspace) if workspace else None
 
     async def delete_team_workspace(self, workspace_id: int) -> bool:
-        """Deletes a team workspace. Personal workspaces cannot be deleted."""
+        """Deletes a team workspace and its workspace-scoped dependencies."""
         result = await self.db.execute(
             select(self.model).where(
                 self.model.id == workspace_id,
@@ -252,9 +253,40 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
         if not workspace:
             return False
 
+        await self._delete_workspace_dependencies(workspace_id)
         await self.db.delete(workspace)
         await self.db.commit()
         return True
+
+    async def _delete_workspace_dependencies(self, workspace_id: int) -> None:
+        """Removes rows that reference a workspace before the workspace is deleted."""
+        await self.db.execute(
+            text(
+                """
+                UPDATE media_items
+                SET source_media_item_id = NULL
+                WHERE source_media_item_id IN (
+                    SELECT id FROM media_items WHERE workspace_id = :workspace_id
+                )
+                """
+            ),
+            {"workspace_id": workspace_id},
+        )
+        await self.db.execute(
+            delete(WorkspaceMemberAssociation).where(
+                WorkspaceMemberAssociation.workspace_id == workspace_id
+            )
+        )
+        for statement in (
+            "DELETE FROM media_items WHERE workspace_id = :workspace_id",
+            "DELETE FROM source_assets WHERE workspace_id = :workspace_id",
+            "DELETE FROM brand_guidelines WHERE workspace_id = :workspace_id",
+            "DELETE FROM tags WHERE workspace_id = :workspace_id",
+        ):
+            await self.db.execute(
+                text(statement),
+                {"workspace_id": workspace_id},
+            )
 
     async def get_by_id(self, item_id: int) -> WorkspaceModel | None:
         """Gets a workspace by ID with members."""
@@ -266,6 +298,38 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
             return None
         return self._map_to_schema(workspace)
 
+    async def find_all(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        include_deleted: bool = False,
+    ) -> list[WorkspaceModel]:
+        """Finds all workspaces with members mapped for API responses."""
+        query = (
+            select(self.model)
+            .order_by(self.model.name)
+            .execution_options(include_deleted=include_deleted)
+        )
+        result = await self.db.execute(query.limit(limit).offset(offset))
+        workspaces = result.scalars().all()
+        return [self._map_to_schema(workspace) for workspace in workspaces]
+
+    def _normalize_member_role(self, role: str) -> WorkspaceRoleEnum:
+        """Maps legacy DB role values to the workspace-only model."""
+        if role in {WorkspaceRoleEnum.ADMIN.value, "owner"}:
+            return WorkspaceRoleEnum.ADMIN
+        return WorkspaceRoleEnum.USER
+
+    def _normalize_workspace_type(self, workspace_type: str) -> WorkspaceTypeEnum:
+        """Maps legacy DB workspace type values to personal/team."""
+        if workspace_type in {
+            WorkspaceTypeEnum.TEAM.value,
+            "global",
+            "public",
+        }:
+            return WorkspaceTypeEnum.TEAM
+        return WorkspaceTypeEnum.PERSONAL
+
     def _map_to_schema(self, workspace: Workspace) -> WorkspaceModel:
         """Helper to map SQLAlchemy Workspace to Pydantic WorkspaceModel."""
         members = []
@@ -275,7 +339,7 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
                     user_id=member_assoc.user_id,
                     email=member_assoc.user.email if member_assoc.user else "unknown",
                     name=member_assoc.user.name if member_assoc.user else None,
-                    role=member_assoc.role,
+                    role=self._normalize_member_role(member_assoc.role),
                 )
             )
 
@@ -283,7 +347,7 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
             "id": workspace.id,
             "name": workspace.name,
             "owner_id": workspace.owner_id,
-            "type": workspace.type,
+            "type": self._normalize_workspace_type(workspace.type),
             "created_at": workspace.created_at,
             "updated_at": workspace.updated_at,
             "members": members,

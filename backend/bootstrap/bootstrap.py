@@ -57,7 +57,12 @@ from src.users.repository.user_repository import UserRepository
 from src.users.user_model import UserModel, UserRoleEnum
 from src.workspaces.dto.create_workspace_dto import CreateWorkspaceDto
 from src.workspaces.repository.workspace_repository import WorkspaceRepository
-from src.workspaces.schema.workspace_model import WorkspaceModel, WorkspaceTypeEnum
+from src.workspaces.schema.workspace_model import (
+    WorkspaceMember,
+    WorkspaceModel,
+    WorkspaceRoleEnum,
+    WorkspaceTypeEnum,
+)
 from src.workspaces.workspace_service import WorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -170,12 +175,21 @@ async def ensure_default_team_workspace_exists(
                 + " Workspace"
             )
 
+            owner_member = WorkspaceMember(
+                user_id=admin_user.id,
+                email=admin_user.email,
+                name=admin_user.name,
+                role=WorkspaceRoleEnum.ADMIN,
+            )
             default_workspace = WorkspaceModel(
                 name=workspace_name,
                 owner_id=admin_user.id,
                 type=WorkspaceTypeEnum.TEAM,
             )
-            await workspace_repo.create(default_workspace)
+            await workspace_repo.create(
+                default_workspace,
+                initial_members=[owner_member],
+            )
             logger.info(
                 f"Default team '{workspace_name}' created successfully."
             )
@@ -185,20 +199,37 @@ async def ensure_default_team_workspace_exists(
         )
 
 
-async def ensure_bootstrap_admin_workspaces(
-    db: AsyncSession,
-    admin_user: UserModel | None,
-) -> None:
-    """Provisions workspace access for the bootstrap admin."""
-    if not admin_user:
+async def ensure_bootstrap_admin_workspaces(db: AsyncSession) -> None:
+    """Provisions personal workspaces for all configured bootstrap admin emails."""
+    admin_emails = set(config_service.ADMIN_OWNER_EMAILS)
+    primary_admin_email = resolve_bootstrap_admin_email()
+    if primary_admin_email:
+        admin_emails.add(primary_admin_email)
+
+    if not admin_emails:
         logger.warning(
-            "Skipping bootstrap admin workspace provisioning: no admin user."
+            "Skipping bootstrap admin workspace provisioning: no admin emails."
         )
         return
 
+    user_repo = UserRepository(db)
+    workspace_service = build_workspace_service(db)
     logger.info("--- Ensuring Bootstrap Admin Workspaces ---")
-    admin_user = await ensure_admin_user_has_admin_role(db, admin_user)
-    await ensure_personal_workspace(db, admin_user)
+
+    for email in sorted(admin_emails):
+        user = await user_repo.get_by_email(email)
+        if not user:
+            logger.info(
+                "Admin email '%s' has no user yet; skipping workspace.",
+                email,
+            )
+            continue
+        user = await ensure_admin_user_has_admin_role(db, user)
+        await workspace_service.ensure_personal_workspace(user)
+        logger.info(
+            "Bootstrap admin personal workspace ensured for '%s'.",
+            email,
+        )
 
 
 async def ensure_admin_user_exists(db: AsyncSession) -> UserModel | None:
@@ -584,7 +615,7 @@ async def main():
         async with async_session_local() as db:
             admin_user = await ensure_admin_user_exists(db)
             await ensure_default_team_workspace_exists(db, admin_user)
-            await ensure_bootstrap_admin_workspaces(db, admin_user)
+            await ensure_bootstrap_admin_workspaces(db)
             await seed_vto_assets(db, admin_user)
             await seed_media_templates(db, admin_user)
     finally:

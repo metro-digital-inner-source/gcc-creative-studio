@@ -21,9 +21,16 @@ from fastapi import Depends, HTTPException, Request, status
 from google.auth.transport import requests as google_auth_requests
 from google.oauth2 import id_token
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.common.email_service import EmailService
 from src.config.config_service import config_service
+from src.database import get_db
+from src.users.repository.user_repository import UserRepository
 from src.users.user_model import UserModel, UserRoleEnum
 from src.users.user_service import UserService
+from src.workspaces.repository.workspace_repository import WorkspaceRepository
+from src.workspaces.workspace_service import WorkspaceService
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +62,32 @@ def _verify_iap_jwt(iap_jwt: str) -> dict:
     )
 
 
+async def _ensure_user_has_workspace_access(
+    db: AsyncSession,
+    user: UserModel,
+) -> None:
+    """Creates a personal workspace when a provisioned user has none."""
+    if not user.id:
+        return
+
+    workspace_repo = WorkspaceRepository(db)
+    memberships = await workspace_repo.find_by_member_id(user.id)
+    if memberships:
+        return
+
+    workspace_service = WorkspaceService(
+        workspace_repo=workspace_repo,
+        user_repo=UserRepository(db),
+        email_service=EmailService(),
+    )
+    await workspace_service.ensure_personal_workspace(user)
+    logger.info("Auto-provisioned personal workspace for user %s", user.email)
+
+
 async def get_current_user(
     request: Request,
     user_service: UserService = Depends(UserService),
+    db: AsyncSession = Depends(get_db),
 ) -> UserModel:
     """Authenticate via IAP JWT (deployed) or local identity header.
 
@@ -149,6 +179,8 @@ async def get_current_user(
                 await user_service.user_repo.update(
                     user_doc.id, {"picture": picture}
                 )
+
+        await _ensure_user_has_workspace_access(db, user_doc)
 
         logger.info(
             "User authenticated successfully: %s (ID: %s)",

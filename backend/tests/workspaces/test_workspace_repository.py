@@ -18,6 +18,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.workspaces.repository.workspace_repository import WorkspaceRepository
+from src.workspaces.schema.workspace_model import (
+    Workspace,
+    WorkspaceMemberAssociation,
+    WorkspaceRoleEnum,
+    WorkspaceTypeEnum,
+)
 
 
 @pytest.fixture(name="workspace_repo")
@@ -68,3 +74,34 @@ class TestWorkspaceRepository:
         response = await workspace_repo.get_system_team_workspace()
         assert response.id == 1
         assert response.name == "Team"
+
+    def test_map_to_schema_normalizes_legacy_member_role(self, workspace_repo):
+        import datetime
+
+        now = datetime.datetime.now(datetime.UTC)
+        user = MagicMock()
+        user.email = "legacy@example.com"
+        user.name = "Legacy User"
+
+        workspace = Workspace(
+            id=1,
+            name="Legacy Team",
+            owner_id=1,
+            type="public",
+            created_at=now,
+            updated_at=now,
+        )
+        workspace.members = [
+            WorkspaceMemberAssociation(
+                workspace_id=1,
+                user_id=2,
+                role="owner",
+                user=user,
+            )
+        ]
+
+        mapped = workspace_repo._map_to_schema(workspace)
+
+        assert mapped.type == WorkspaceTypeEnum.TEAM
+        assert mapped.members[0].role == WorkspaceRoleEnum.ADMIN
+        assert mapped.members[0].email == "legacy@example.com"

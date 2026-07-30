@@ -15,6 +15,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from src.auth.auth_guard import RoleChecker, get_current_user
 from src.config.config_service import config_service
+from src.workspaces.schema.workspace_model import WorkspaceModel
 from src.users.user_model import UserRoleEnum, UserModel
 from src.admin.admin_service import AdminService
 from src.admin.dto.admin_request_dto import AddUserByEmailRequest
@@ -147,7 +148,7 @@ async def cleanup_stuck_jobs(admin_service: AdminService = Depends()):
 # Group Management Endpoints replaced by Workspace Management
 
 
-@router.get("/workspaces")
+@router.get("/workspaces", response_model=list[WorkspaceModel])
 async def get_all_workspaces(admin_service: AdminService = Depends()):
     """Retrieves all workspaces with members (admin view)."""
     return await admin_service.get_all_workspaces()
@@ -228,8 +229,8 @@ async def delete_team_workspace_admin(
     deleted = await admin_service.delete_team_workspace_admin(workspace_id)
     if not deleted:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Team workspace {workspace_id} not found",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete team workspace {workspace_id}",
         )
     return {"message": f"Workspace {workspace_id} deleted successfully"}
 

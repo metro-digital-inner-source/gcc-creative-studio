@@ -168,8 +168,8 @@ class WorkspaceService:
         return await self.workspace_repo.find_by_member_id(user.id)
 
     async def list_all_workspaces_admin(self) -> list[WorkspaceModel]:
-        """Returns all workspaces for system admin management."""
-        return await self.workspace_repo.find_all(limit=1000, offset=0)
+        """Returns team workspaces for system admin management."""
+        return await self.workspace_repo.find_all_team(limit=1000, offset=0)
 
     async def check_workspace_name_exists(self, name: str) -> bool:
         """Check if workspace name already exists globally."""

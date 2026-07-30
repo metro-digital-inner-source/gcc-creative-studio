@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -55,10 +55,15 @@ class TestGetCurrentUser:
             {"X-Goog-Authenticated-User-Email": "accounts.google.com:test@example.com"}
         )
 
-        user = await get_current_user(
-            request=request,
-            user_service=mock_user_service,
-        )
+        with patch(
+            "src.auth.auth_guard._ensure_user_has_workspace_access",
+            new=AsyncMock(),
+        ):
+            user = await get_current_user(
+                request=request,
+                user_service=mock_user_service,
+                db=AsyncMock(),
+            )
 
         assert user.email == "test@example.com"
         mock_user_service.user_repo.get_by_email.assert_called_once_with(
@@ -76,11 +81,16 @@ class TestGetCurrentUser:
 
         request = _mock_request()
 
-        with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(
-                request=request,
-                user_service=mock_user_service,
-            )
+        with patch(
+            "src.auth.auth_guard._ensure_user_has_workspace_access",
+            new=AsyncMock(),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_current_user(
+                    request=request,
+                    user_service=mock_user_service,
+                    db=AsyncMock(),
+                )
 
         assert exc_info.value.status_code == 403
         assert "not been provisioned" in exc_info.value.detail
@@ -92,11 +102,16 @@ class TestGetCurrentUser:
 
         request = _mock_request()
 
-        with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(
-                request=request,
-                user_service=mock_user_service,
-            )
+        with patch(
+            "src.auth.auth_guard._ensure_user_has_workspace_access",
+            new=AsyncMock(),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_current_user(
+                    request=request,
+                    user_service=mock_user_service,
+                    db=AsyncMock(),
+                )
 
         assert exc_info.value.status_code == 403
         assert "User identity could not be confirmed" in exc_info.value.detail
@@ -109,11 +124,16 @@ class TestGetCurrentUser:
 
         request = _mock_request()
 
-        with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(
-                request=request,
-                user_service=mock_user_service,
-            )
+        with patch(
+            "src.auth.auth_guard._ensure_user_has_workspace_access",
+            new=AsyncMock(),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_current_user(
+                    request=request,
+                    user_service=mock_user_service,
+                    db=AsyncMock(),
+                )
 
         assert exc_info.value.status_code == 401
         assert "not part of an allowed organization" in exc_info.value.detail

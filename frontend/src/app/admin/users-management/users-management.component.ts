@@ -125,7 +125,9 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
 
     this.workspaceService.getAllWorkspacesAdmin().subscribe({
       next: (workspaces: Workspace[]) => {
-        this.workspaces = workspaces;
+        this.workspaces = workspaces.filter(
+          ws => ws.type === WorkspaceType.TEAM,
+        );
         this.buildTreeData();
         this.isLoading = false;
       },

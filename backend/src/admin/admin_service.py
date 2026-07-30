@@ -247,9 +247,29 @@ class AdminService:
 
     async def delete_team_workspace_admin(self, workspace_id: int) -> bool:
         """Deletes a team workspace."""
-        return await self.workspace_service.workspace_repo.delete_team_workspace(
+        workspace = await self.workspace_service.workspace_repo.get_by_id(
             workspace_id
         )
+        if not workspace:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workspace not found.",
+            )
+        if workspace.type != WorkspaceTypeEnum.TEAM:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only team workspaces can be deleted from admin.",
+            )
+
+        deleted = await self.workspace_service.workspace_repo.delete_team_workspace(
+            workspace_id
+        )
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete team workspace.",
+            )
+        return True
 
     async def reset_dev_database(self) -> dict:
         """DEV ONLY: Truncates all application data tables for fresh start."""
