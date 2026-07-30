@@ -14,7 +14,7 @@
 
 
 from fastapi import Depends
-from sqlalchemy import delete, exists, select, text
+from sqlalchemy import delete, exists, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.common.base_repository import BaseRepository
@@ -261,23 +261,27 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
 
     async def find_invalid_personal_workspaces(self) -> list[WorkspaceModel]:
         """Finds personal workspaces whose name is not the owner's email."""
+        # Compare in SQL — do not access workspace.owner here; lazy loads fail
+        # under AsyncSession (greenlet_spawn / await_only errors).
         result = await self.db.execute(
             select(self.model)
             .join(User, self.model.owner_id == User.id)
-            .where(self.model.type == WorkspaceTypeEnum.PERSONAL.value),
+            .where(
+                self.model.type == WorkspaceTypeEnum.PERSONAL.value,
+                func.lower(func.trim(self.model.name))
+                != func.lower(func.trim(User.email)),
+            ),
         )
         workspaces = result.scalars().all()
-        invalid_workspaces = []
-        for workspace in workspaces:
-            normalized_name = workspace.name.strip().lower()
-            owner_email = (
-                workspace.owner.email.strip().lower()
-                if workspace.owner and workspace.owner.email
-                else ""
+        return [
+            WorkspaceModel(
+                id=workspace.id,
+                name=workspace.name,
+                owner_id=workspace.owner_id,
+                type=WorkspaceTypeEnum.PERSONAL,
             )
-            if normalized_name != owner_email:
-                invalid_workspaces.append(workspace)
-        return [self._map_to_schema(workspace) for workspace in invalid_workspaces]
+            for workspace in workspaces
+        ]
 
     async def delete_team_workspace(self, workspace_id: int) -> bool:
         """Deletes a team workspace and its workspace-scoped dependencies."""
