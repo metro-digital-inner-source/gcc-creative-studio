@@ -53,6 +53,8 @@ export class CreateTeamWorkspaceDialogComponent {
 
   submit(): void {
     if (this.form.invalid) return;
-    this.dialogRef.close({name: this.form.value.name.trim()});
+    const name = this.form.get('name')?.value?.trim();
+    if (!name) return;
+    this.dialogRef.close({name});
   }
 }
