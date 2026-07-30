@@ -25,7 +25,8 @@ export interface AddUserDialogData {
 
 export interface AddUserDialogResult {
   email: string;
-  workspaceId: number;
+  isAdmin: boolean;
+  workspaceId?: number;
 }
 
 @Component({
@@ -47,6 +48,14 @@ export interface AddUserDialogResult {
         </mat-form-field>
 
         <mat-form-field appearance="outline">
+          <mat-label>User Type</mat-label>
+          <mat-select formControlName="userType">
+            <mat-option value="user">Regular User</mat-option>
+            <mat-option value="admin">Admin</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" *ngIf="!isAdminSelected">
           <mat-label>Team Workspace</mat-label>
           <mat-select formControlName="workspaceId">
             <mat-option
@@ -61,8 +70,13 @@ export interface AddUserDialogResult {
           </mat-error>
         </mat-form-field>
 
-        <p class="text-sm text-gray-400 mt-2">
-          User will be added to the team workspace and receive a personal workspace.
+        <p class="text-sm text-gray-400 mt-2" *ngIf="isAdminSelected">
+          Admins get access to all workspaces automatically. A personal workspace
+          will be created using their email.
+        </p>
+        <p class="text-sm text-gray-400 mt-2" *ngIf="!isAdminSelected">
+          User will be added to the team workspace and receive a personal
+          workspace.
         </p>
       </div>
 
@@ -85,8 +99,24 @@ export class AddUserDialogComponent {
   ) {
     this.form = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
+      userType: ['user', Validators.required],
       workspaceId: [null as number | null, Validators.required],
     });
+
+    this.form.get('userType')?.valueChanges.subscribe(userType => {
+      const workspaceControl = this.form.get('workspaceId');
+      if (userType === 'admin') {
+        workspaceControl?.clearValidators();
+        workspaceControl?.setValue(null);
+      } else {
+        workspaceControl?.setValidators(Validators.required);
+      }
+      workspaceControl?.updateValueAndValidity();
+    });
+  }
+
+  get isAdminSelected(): boolean {
+    return this.form.get('userType')?.value === 'admin';
   }
 
   submit(): void {
@@ -96,9 +126,11 @@ export class AddUserDialogComponent {
     }
 
     const value = this.form.getRawValue();
+    const isAdmin = value.userType === 'admin';
     this.dialogRef.close({
       email: (value.email || '').trim().toLowerCase(),
-      workspaceId: Number(value.workspaceId),
+      isAdmin,
+      workspaceId: isAdmin ? undefined : Number(value.workspaceId),
     } as AddUserDialogResult);
   }
 }

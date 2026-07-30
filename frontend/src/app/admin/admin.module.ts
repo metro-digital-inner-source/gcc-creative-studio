@@ -20,6 +20,7 @@ import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {AdminRoutingModule} from './admin-routing.module';
 import {AdminLayoutComponent} from './admin-layout/admin-layout.component';
 import {UsersManagementComponent} from './users-management/users-management.component';
+import {UserFormComponent} from './users-management/user-form.component';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatListModule} from '@angular/material/list';
 import {MatIconModule} from '@angular/material/icon';
@@ -32,7 +33,6 @@ import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {UserFormComponent} from './users-management/user-form.component';
 import {MatDialogModule} from '@angular/material/dialog';
 import {MatSnackBarModule} from '@angular/material/snack-bar';
 import {MatChipsModule} from '@angular/material/chips';
@@ -42,6 +42,8 @@ import {AdminHomeComponent} from './admin-home/admin-home.component';
 import {AdminDeprecatedModule} from './admin-deprecated.module';
 import {AddUserDialogComponent} from './users-management/add-user-dialog.component';
 import {CreateTeamWorkspaceDialogComponent} from './users-management/create-team-workspace-dialog.component';
+import {AdminGroupAnalyticsComponent} from './admin-group-analytics/admin-group-analytics.component';
+import {UnitPricesDialogComponent} from './admin-group-analytics/unit-prices-dialog.component';
 
 @NgModule({
   declarations: [
@@ -51,6 +53,8 @@ import {CreateTeamWorkspaceDialogComponent} from './users-management/create-team
     AdminHomeComponent,
     AddUserDialogComponent,
     CreateTeamWorkspaceDialogComponent,
+    AdminGroupAnalyticsComponent,
+    UnitPricesDialogComponent,
   ],
   imports: [
     CommonModule,

@@ -50,6 +50,8 @@ from src.multimodal.gemini_service import GeminiService, PromptTargetEnum
 from src.source_assets.repository.source_asset_repository import (
     SourceAssetRepository,
 )
+from src.usage.genai_usage_tracker import record_genai_usage
+from src.usage.request_context import set_current_user
 from src.users.user_model import UserModel
 from src.videos.dto.concatenate_videos_dto import ConcatenateVideosDto
 from src.videos.dto.create_veo_dto import CreateVeoDto
@@ -110,6 +112,7 @@ def _process_video_in_background(
         asyncio.set_event_loop(loop)
 
         async def _async_worker():
+            set_current_user(user_email, None)
             async with WorkerDatabase() as db_factory:
                 async with db_factory() as db:
                     # Create new instances of dependencies within this process
@@ -814,12 +817,30 @@ def _process_video_in_background(
                             ):
                                 return
 
+                            generated_videos = (
+                                operation.response.generated_videos
+                            )
+                            duration_for_usage = (
+                                request_dto.duration_seconds
+                                if not source_video_for_api
+                                else 7
+                            )
+                            await record_genai_usage(
+                                model=str(request_dto.generation_model),
+                                feature="veo_generate",
+                                media_count=len(generated_videos),
+                                duration_seconds=float(duration_for_usage)
+                                if duration_for_usage is not None
+                                else None,
+                                user_email=user_email,
+                            )
+
                             # Download the generated video and create thumbnail
                             thumbnail_path = ""
 
                             for (
                                 generated_video
-                            ) in operation.response.generated_videos:
+                            ) in generated_videos:
                                 if (
                                     generated_video.video
                                     and generated_video.video.uri

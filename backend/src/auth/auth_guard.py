@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.common.email_service import EmailService
 from src.config.config_service import config_service
+from src.usage.request_context import set_current_user
 from src.database import get_db
 from src.users.repository.user_repository import UserRepository
 from src.users.user_model import UserModel, UserRoleEnum
@@ -187,6 +188,7 @@ async def get_current_user(
             email,
             user_doc.id,
         )
+        set_current_user(user_doc.email, user_doc.id)
         return user_doc
 
     except HTTPException:

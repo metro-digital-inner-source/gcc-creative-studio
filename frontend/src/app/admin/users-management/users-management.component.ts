@@ -24,16 +24,13 @@ import {
 } from '@angular/core';
 import {MatTableDataSource} from '@angular/material/table';
 import {MatSort} from '@angular/material/sort';
-import {Subject, firstValueFrom} from 'rxjs';
+import {Subject} from 'rxjs';
 import {debounceTime, distinctUntilChanged, takeUntil} from 'rxjs/operators';
 import {isPlatformBrowser} from '@angular/common';
-import {UserService} from './user.service';
 import {MatDialog} from '@angular/material/dialog';
-import {UserFormComponent} from './user-form.component';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import {UserModel} from '../../common/models/user.model';
 import {Workspace, WorkspaceType} from '../../common/models/workspace.model';
-import {WorkspaceMember, WorkspaceRole} from '../../common/models/workspace-member.model';
+import {WorkspaceMember} from '../../common/models/workspace-member.model';
 import {WorkspaceService} from '../../services/workspace/workspace.service';
 import {
   AddUserDialogComponent,
@@ -69,7 +66,6 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
     'expand',
     'name',
     'email',
-    'roles',
     'createdAt',
     'actions',
   ];
@@ -90,7 +86,6 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
   @ViewChild(MatSort) sort!: MatSort;
 
   constructor(
-    private userService: UserService,
     private workspaceService: WorkspaceService,
     public dialog: MatDialog,
     private _snackBar: MatSnackBar,
@@ -242,61 +237,6 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
     this.applyFilterToTree();
   }
 
-  openUserForm(member: WorkspaceMember): void {
-    this.userService.getUser(member.userId).subscribe({
-      next: (user: UserModel) => {
-        const dialogRef = this.dialog.open(UserFormComponent, {
-          width: '450px',
-          data: {user, isEditMode: true},
-        });
-
-        dialogRef
-          .afterClosed()
-          .pipe(takeUntil(this.destroy$))
-          .subscribe(async (result: UserModel | undefined) => {
-            if (result) {
-              this.isLoading = true;
-              try {
-                await firstValueFrom(this.userService.updateUser(result));
-                handleSuccessSnackbar(this._snackBar, 'User updated successfully!');
-                this.loadWorkspaces();
-              } catch (err) {
-                handleErrorSnackbar(this._snackBar, err, 'Update user');
-              } finally {
-                this.isLoading = false;
-              }
-            }
-          });
-      },
-      error: err => handleErrorSnackbar(this._snackBar, err, 'Fetch user'),
-    });
-  }
-
-  deleteUser(userId: number): void {
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      width: '400px',
-      data: {
-        title: 'Confirm Deletion',
-        message: `Are you sure you want to delete user with ID: ${userId}?`,
-      },
-    });
-
-    dialogRef.afterClosed().subscribe(async (result: unknown) => {
-      if (result) {
-        this.isLoading = true;
-        try {
-          await firstValueFrom(this.userService.deleteUser(userId));
-          handleSuccessSnackbar(this._snackBar, 'User deleted successfully!');
-          this.loadWorkspaces();
-        } catch (err) {
-          handleErrorSnackbar(this._snackBar, err, 'Delete user');
-        } finally {
-          this.isLoading = false;
-        }
-      }
-    });
-  }
-
   deleteWorkspace(workspaceId: number, workspaceName: string, workspaceType: WorkspaceType): void {
     if (workspaceType === WorkspaceType.PERSONAL) {
       handleErrorSnackbar(
@@ -315,25 +255,24 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
       },
     });
 
-    dialogRef.afterClosed().subscribe(async (result: unknown) => {
-      if (result) {
-        this.isLoading = true;
-        try {
-          await firstValueFrom(
-            this.workspaceService.deleteTeamWorkspace(workspaceId),
-          );
+    dialogRef.afterClosed().subscribe((result: unknown) => {
+      if (!result) return;
+
+      this.isLoading = true;
+      this.workspaceService.deleteTeamWorkspace(workspaceId).subscribe({
+        next: () => {
           handleSuccessSnackbar(
             this._snackBar,
             `Workspace "${workspaceName}" deleted successfully!`,
           );
           this.expandedWorkspaceIds.delete(workspaceId);
           this.loadWorkspaces();
-        } catch (err) {
+        },
+        error: err => {
           handleErrorSnackbar(this._snackBar, err, 'Delete workspace');
-        } finally {
           this.isLoading = false;
-        }
-      }
+        },
+      });
     });
   }
 
@@ -373,60 +312,60 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
     });
 
     dialogRef.afterClosed().subscribe((result: AddUserDialogResult | undefined) => {
-      if (result) {
-        this.isLoading = true;
-        this.workspaceService
-          .addUserToWorkspaceByEmail(result.workspaceId, result.email)
-          .subscribe({
-            next: () => {
-              handleSuccessSnackbar(
-                this._snackBar,
-                'User added to workspace successfully!',
-              );
-              this.loadWorkspaces();
-            },
-            error: err => {
-              this.isLoading = false;
-              handleErrorSnackbar(this._snackBar, err, 'Add user to workspace');
-            },
-          });
-      }
-    });
-  }
+      if (!result) return;
 
-  toggleMemberAdmin(node: TreeNode): void {
-    if (!node.member || !node.parentWorkspaceId) return;
-    const newRole =
-      node.member.role === WorkspaceRole.ADMIN
-        ? WorkspaceRole.USER
-        : WorkspaceRole.ADMIN;
+      this.isLoading = true;
+      const request$ = result.isAdmin
+        ? this.workspaceService.addAdminUserByEmail(result.email)
+        : this.workspaceService.addUserToWorkspaceByEmail(
+            result.workspaceId!,
+            result.email,
+          );
 
-    this.workspaceService
-      .updateWorkspaceMemberRole(
-        node.parentWorkspaceId,
-        node.member.userId,
-        newRole,
-      )
-      .subscribe({
+      request$.subscribe({
         next: () => {
-          handleSuccessSnackbar(this._snackBar, 'Member role updated.');
+          handleSuccessSnackbar(
+            this._snackBar,
+            result.isAdmin
+              ? 'Admin user added successfully!'
+              : 'User added to workspace successfully!',
+          );
           this.loadWorkspaces();
         },
-        error: err => handleErrorSnackbar(this._snackBar, err, 'Update role'),
+        error: err => {
+          this.isLoading = false;
+          handleErrorSnackbar(this._snackBar, err, 'Add user');
+        },
       });
+    });
   }
 
   removeMemberFromWorkspace(node: TreeNode): void {
     if (!node.member || !node.parentWorkspaceId) return;
 
-    this.workspaceService
-      .removeUserFromWorkspace(node.parentWorkspaceId, node.member.userId)
-      .subscribe({
-        next: () => {
-          handleSuccessSnackbar(this._snackBar, 'Member removed from workspace.');
-          this.loadWorkspaces();
-        },
-        error: err => handleErrorSnackbar(this._snackBar, err, 'Remove member'),
-      });
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: '400px',
+      data: {
+        title: 'Remove User',
+        message: `Remove ${node.member.email} from this workspace?`,
+      },
+    });
+
+    dialogRef.afterClosed().subscribe((confirmed: unknown) => {
+      if (!confirmed) return;
+
+      this.workspaceService
+        .removeUserFromWorkspace(node.parentWorkspaceId!, node.member!.userId)
+        .subscribe({
+          next: () => {
+            handleSuccessSnackbar(
+              this._snackBar,
+              'Member removed from workspace.',
+            );
+            this.loadWorkspaces();
+          },
+          error: err => handleErrorSnackbar(this._snackBar, err, 'Remove member'),
+        });
+    });
   }
 }

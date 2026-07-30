@@ -103,6 +103,7 @@ async def lifespan(app: FastAPI):
 
         logger.info("Running automatic database bootstrapping...")
         from bootstrap.bootstrap import (
+            cleanup_invalid_personal_workspaces,
             ensure_admin_user_exists,
             ensure_bootstrap_admin_workspaces,
             ensure_default_team_workspace_exists,
@@ -112,6 +113,7 @@ async def lifespan(app: FastAPI):
         async with async_session_local() as db:
             admin_user = await ensure_admin_user_exists(db)
             await ensure_default_team_workspace_exists(db, admin_user)
+            await cleanup_invalid_personal_workspaces(db)
             await ensure_bootstrap_admin_workspaces(db)
         logger.info("Database bootstrap completed successfully.")
     except Exception as e:

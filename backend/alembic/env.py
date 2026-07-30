@@ -33,6 +33,9 @@ from src.users.user_model import User
 from src.source_assets.schema.source_asset_model import SourceAsset
 from src.media_templates.schema.media_template_model import MediaTemplate
 from src.common.schema.unified_gallery_view import UnifiedGalleryView
+from src.usage.schema.genai_usage_event_model import (  # noqa: F401
+    GenAIUsageEvent,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

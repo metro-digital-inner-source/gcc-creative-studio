@@ -50,6 +50,11 @@ from src.common.schema.media_item_model import (
 from src.common.storage_service import GcsService
 from src.config.config_service import config_service
 from src.database import WorkerDatabase
+from src.usage.genai_usage_tracker import (
+    record_genai_usage,
+    record_usage_from_response,
+)
+from src.usage.request_context import set_current_user
 from src.galleries.dto.gallery_response_dto import MediaItemResponse
 from src.images.dto.create_imagen_dto import CreateImagenDto
 from src.images.dto.upscale_imagen_dto import UpscaleImagenDto
@@ -143,6 +148,7 @@ def _process_vto_in_background(
         # WorkerDatabase moved to top level
 
         async def _async_worker():
+            set_current_user(current_user.email, current_user.id)
             async with WorkerDatabase() as db_factory:
                 async with db_factory() as db:
                     # Create new instances of dependencies within this process
@@ -300,6 +306,13 @@ def _process_vto_in_background(
                                         request_dto.number_of_media
                                     ),
                                 ),
+                            )
+                            await record_genai_usage(
+                                model=cfg.VTO_MODEL_ID,
+                                feature="imagen_vto",
+                                media_count=request_dto.number_of_media,
+                                user_email=current_user.email,
+                                user_id=current_user.id,
                             )
 
                             if i == len(active_garment_inputs) - 1:
@@ -523,6 +536,12 @@ def gemini_generate_image(
                     config=generate_content_config,
                 )
             )
+            record_usage_from_response(
+                response,
+                model=model.value,
+                feature="imagen_gemini_generate_content",
+                media_count=1,
+            )
 
             grounding_metadata = None
 
@@ -627,6 +646,7 @@ def _process_image_in_background(
         # WorkerDatabase moved to top level
 
         async def _async_worker():
+            set_current_user(current_user.email, current_user.id)
             async with WorkerDatabase() as db_factory:
                 async with db_factory() as db:
                     # Create new instances of dependencies within this process
@@ -796,6 +816,13 @@ def _process_image_in_background(
                                     images_imagen_response.generated_images
                                     or []
                                 )
+                                await record_genai_usage(
+                                    model=str(request_dto.generation_model),
+                                    feature="imagen_generate_images",
+                                    media_count=len(all_generated_images),
+                                    user_email=current_user.email,
+                                    user_id=current_user.id,
+                                )
                         # --- PATH 2: IMAGE EDITING (IMAGE-TO-IMAGE) ---
                         elif request_dto.generation_model.is_gemini_image_model:
                             # --- GEMINI FLASH IMAGE-TO-IMAGE ---
@@ -861,6 +888,13 @@ def _process_image_in_background(
                                     raise e
                             all_generated_images.extend(
                                 response.generated_images or [],
+                            )
+                            await record_genai_usage(
+                                model=str(request_dto.generation_model),
+                                feature="imagen_edit_image",
+                                media_count=len(response.generated_images or []),
+                                user_email=current_user.email,
+                                user_id=current_user.id,
                             )
 
                         if not all_generated_images:

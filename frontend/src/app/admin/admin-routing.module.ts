@@ -18,6 +18,7 @@ import {NgModule} from '@angular/core';
 import {RouterModule, Routes} from '@angular/router';
 import {AdminLayoutComponent} from './admin-layout/admin-layout.component';
 import {UsersManagementComponent} from './users-management/users-management.component';
+import {AdminGroupAnalyticsComponent} from './admin-group-analytics/admin-group-analytics.component';
 
 const routes: Routes = [
   {
@@ -26,7 +27,8 @@ const routes: Routes = [
     children: [
       {path: '', redirectTo: 'users', pathMatch: 'full'},
       {path: 'users', component: UsersManagementComponent},
-      {path: 'dashboard', redirectTo: 'users', pathMatch: 'full'},
+      {path: 'analytics', component: AdminGroupAnalyticsComponent},
+      {path: 'dashboard', redirectTo: 'analytics', pathMatch: 'full'},
     ],
   },
 ];

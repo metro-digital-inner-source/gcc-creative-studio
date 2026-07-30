@@ -39,6 +39,7 @@ from src.brand_guidelines.schema.brand_guideline_model import (
 )
 from src.config.config_service import config_service
 from src.images.dto.create_imagen_dto import CreateImagenDto
+from src.usage.genai_usage_tracker import record_usage_from_response
 from src.multimodal.dto.create_prompt_imagen_dto import CreatePromptImageDto
 from src.multimodal.dto.create_prompt_video_dto import CreatePromptVideoDto
 from src.multimodal.rewriters import (
@@ -140,6 +141,11 @@ class GeminiService:
             else:
                 return ""
 
+            record_usage_from_response(
+                response,
+                model=self.rewriter_model,
+                feature="gemini_structured_prompt",
+            )
             return response.text or ""
         except Exception as e:
             logger.error(
@@ -352,6 +358,11 @@ class GeminiService:
                     response_mime_type="text/plain"
                 ),
             )
+            record_usage_from_response(
+                response,
+                model=target_model,
+                feature="gemini_text_generation",
+            )
             logger.info("Successfully received text response from Gemini.")
             # Strip any leading/trailing whitespace from the response
             return response.text.strip() if response.text else ""
@@ -399,6 +410,11 @@ class GeminiService:
                     response_mime_type="application/json",
                     response_schema=BrandGuidelineModel,
                 ),
+            )
+            record_usage_from_response(
+                response,
+                model=self.cfg.GEMINI_MODEL_ID,
+                feature="gemini_brand_pdf_extract",
             )
 
             # The model is configured to return JSON, so we can parse it directly.
@@ -490,6 +506,11 @@ class GeminiService:
                     response_mime_type="application/json",
                     response_schema=BrandGuidelineModel,
                 ),
+            )
+            record_usage_from_response(
+                response,
+                model=self.rewriter_model,
+                feature="gemini_brand_aggregate",
             )
 
             # --- Step 3: Combine Python and AI results ---

@@ -163,11 +163,32 @@ class AdminService:
             raise HTTPException(status_code=500, detail="Failed to add member.")
         return updated
 
+    async def add_admin_user_by_email(
+        self,
+        email: str,
+        admin_user: UserModel,
+    ) -> AddUserByEmailResponse:
+        """Creates/gets a user by email and grants platform admin access."""
+        user, provisioning_status = (
+            await self.user_service.create_or_restore_user_by_email_for_admin(email)
+        )
+        user = await self.user_service.ensure_user_is_platform_admin(user.id)
+        personal_workspace = await self.workspace_service.ensure_personal_workspace(
+            user
+        )
+
+        return AddUserByEmailResponse(
+            provisioning_status=UserProvisioningStatus(provisioning_status),
+            created_new_user=provisioning_status == "created",
+            user_id=user.id,
+            email=user.email,
+            workspace=personal_workspace,
+        )
+
     async def add_user_to_workspace_by_email(
         self,
         workspace_id: int,
         email: str,
-        role: str,
         admin_user: UserModel,
     ) -> AddUserByEmailResponse:
         """Creates/gets a user by email and assigns them to a team workspace."""
@@ -181,12 +202,6 @@ class AdminService:
         if not workspace:
             raise HTTPException(status_code=404, detail="Workspace not found.")
 
-        member_role = (
-            WorkspaceRoleEnum.ADMIN
-            if role == WorkspaceRoleEnum.ADMIN.value
-            else WorkspaceRoleEnum.USER
-        )
-
         if not await self.workspace_service.workspace_repo.is_member(
             workspace_id, user.id
         ):
@@ -194,7 +209,7 @@ class AdminService:
                 user_id=user.id,
                 email=user.email,
                 name=user.name,
-                role=member_role,
+                role=WorkspaceRoleEnum.USER,
             )
             await self.workspace_service.workspace_repo.add_member_to_workspace(
                 workspace_id, member, user.id
@@ -212,6 +227,15 @@ class AdminService:
             email=user.email,
             workspace=updated_workspace,
         )
+
+    async def cleanup_invalid_personal_workspaces(self) -> int:
+        """Removes personal workspaces whose name is not the owner's email."""
+        deleted_count = await self.workspace_service.cleanup_invalid_personal_workspaces()
+        if deleted_count:
+            self.logger.info(
+                "Removed %d invalid personal workspace(s).", deleted_count
+            )
+        return deleted_count
 
     async def update_workspace_member_role(
         self,

@@ -171,6 +171,22 @@ class WorkspaceService:
         """Returns team workspaces for system admin management."""
         return await self.workspace_repo.find_all_team(limit=1000, offset=0)
 
+    async def cleanup_invalid_personal_workspaces(self) -> int:
+        """Removes personal workspaces whose name is not the owner's email."""
+        invalid_workspaces = (
+            await self.workspace_repo.find_invalid_personal_workspaces()
+        )
+        deleted_count = 0
+        for workspace in invalid_workspaces:
+            if workspace.id is None:
+                continue
+            deleted = await self.workspace_repo.delete_personal_workspace(
+                workspace.id
+            )
+            if deleted:
+                deleted_count += 1
+        return deleted_count
+
     async def check_workspace_name_exists(self, name: str) -> bool:
         """Check if workspace name already exists globally."""
         existing = await self.workspace_repo.find_by_name(name)

@@ -87,25 +87,19 @@ export class WorkspaceService {
     );
   }
 
+  addAdminUserByEmail(email: string): Observable<AddUserByEmailResponse> {
+    return this.http.post<AddUserByEmailResponse>(
+      `${environment.backendURL}/admin/users/by-email`,
+      {email},
+    );
+  }
+
   removeUserFromWorkspace(
     workspaceId: number,
     userId: number,
   ): Observable<{message: string}> {
     return this.http.delete<{message: string}>(
       `${this.adminApiUrl}/${workspaceId}/users/${userId}`,
-    );
-  }
-
-  updateWorkspaceMemberRole(
-    workspaceId: number,
-    userId: number,
-    role: WorkspaceRole,
-  ): Observable<Workspace> {
-    const params = new HttpParams().set('role', role);
-    return this.http.patch<Workspace>(
-      `${this.adminApiUrl}/${workspaceId}/users/${userId}`,
-      null,
-      {params},
     );
   }
 

@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from src.auth.auth_guard import RoleChecker, get_current_user
 from src.config.config_service import config_service
 from src.workspaces.schema.workspace_model import WorkspaceModel
 from src.users.user_model import UserRoleEnum, UserModel
 from src.admin.admin_service import AdminService
-from src.admin.dto.admin_request_dto import AddUserByEmailRequest
+from src.admin.dto.admin_request_dto import AddUserByEmailRequest, AddAdminUserByEmailRequest
 from src.admin.dto.admin_response_dto import (
     AdminOverviewStats,
     AdminMediaOverTime,
@@ -28,6 +30,12 @@ from src.admin.dto.admin_response_dto import (
     AdminMonthlyActiveUsers,
     AddUserByEmailResponse,
 )
+from src.usage.dto.usage_cost_dto import (
+    UnitPriceRow,
+    UsageCostByUserResponse,
+    WorkspaceUsageCostResponse,
+)
+from src.usage.usage_cost_service import UsageCostService
 
 router = APIRouter(
     prefix="/api/admin",
@@ -179,6 +187,22 @@ async def add_user_to_workspace(
 
 
 @router.post(
+    "/users/by-email",
+    response_model=AddUserByEmailResponse,
+)
+async def add_admin_user_by_email(
+    request: AddAdminUserByEmailRequest,
+    admin_service: AdminService = Depends(),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Creates/gets a user by email and grants platform admin access."""
+    return await admin_service.add_admin_user_by_email(
+        email=request.email,
+        admin_user=current_user,
+    )
+
+
+@router.post(
     "/workspaces/{workspace_id}/users/by-email",
     response_model=AddUserByEmailResponse,
 )
@@ -192,7 +216,6 @@ async def add_user_to_workspace_by_email(
     return await admin_service.add_user_to_workspace_by_email(
         workspace_id=workspace_id,
         email=request.email,
-        role="user",
         admin_user=current_user,
     )
 
@@ -233,6 +256,51 @@ async def delete_team_workspace_admin(
             detail=f"Failed to delete team workspace {workspace_id}",
         )
     return {"message": f"Workspace {workspace_id} deleted successfully"}
+
+
+@router.get(
+    "/usage/unit-prices",
+    response_model=list[UnitPriceRow],
+    summary="List GenAI model unit prices",
+)
+async def list_genai_unit_prices(
+    usage_cost_service: UsageCostService = Depends(),
+):
+    """Returns seeded / configured unit prices used for cost estimates."""
+    return await usage_cost_service.list_unit_prices()
+
+
+@router.get(
+    "/usage/cost-by-user",
+    response_model=UsageCostByUserResponse,
+    summary="Estimated GenAI cost per user",
+)
+async def get_usage_cost_by_user(
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    usage_cost_service: UsageCostService = Depends(),
+):
+    """Estimates spend per user by joining usage events with unit prices."""
+    return await usage_cost_service.get_cost_by_user(start_date, end_date)
+
+
+@router.get(
+    "/usage/cost-by-workspace",
+    response_model=WorkspaceUsageCostResponse,
+    summary="Estimated GenAI cost for users in a workspace",
+)
+async def get_usage_cost_by_workspace(
+    workspace_id: int = Query(..., description="Workspace to scope usage to"),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    usage_cost_service: UsageCostService = Depends(),
+):
+    """Personal workspace: owner only. Team workspace: all members."""
+    return await usage_cost_service.get_cost_by_workspace(
+        workspace_id=workspace_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
 
 @router.post("/dev/reset-database")

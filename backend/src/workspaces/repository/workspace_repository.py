@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.common.base_repository import BaseRepository
 from src.database import get_db
+from src.users.user_model import User
 from src.workspaces.schema.workspace_model import (
     Workspace,
     WorkspaceMember,
@@ -240,6 +241,43 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
         )
         workspace = result.scalar_one_or_none()
         return self._map_to_schema(workspace) if workspace else None
+
+    async def delete_personal_workspace(self, workspace_id: int) -> bool:
+        """Deletes a personal workspace and its workspace-scoped dependencies."""
+        result = await self.db.execute(
+            select(self.model).where(
+                self.model.id == workspace_id,
+                self.model.type == WorkspaceTypeEnum.PERSONAL.value,
+            ),
+        )
+        workspace = result.scalar_one_or_none()
+        if not workspace:
+            return False
+
+        await self._delete_workspace_dependencies(workspace_id)
+        await self.db.delete(workspace)
+        await self.db.commit()
+        return True
+
+    async def find_invalid_personal_workspaces(self) -> list[WorkspaceModel]:
+        """Finds personal workspaces whose name is not the owner's email."""
+        result = await self.db.execute(
+            select(self.model)
+            .join(User, self.model.owner_id == User.id)
+            .where(self.model.type == WorkspaceTypeEnum.PERSONAL.value),
+        )
+        workspaces = result.scalars().all()
+        invalid_workspaces = []
+        for workspace in workspaces:
+            normalized_name = workspace.name.strip().lower()
+            owner_email = (
+                workspace.owner.email.strip().lower()
+                if workspace.owner and workspace.owner.email
+                else ""
+            )
+            if normalized_name != owner_email:
+                invalid_workspaces.append(workspace)
+        return [self._map_to_schema(workspace) for workspace in invalid_workspaces]
 
     async def delete_team_workspace(self, workspace_id: int) -> bool:
         """Deletes a team workspace and its workspace-scoped dependencies."""

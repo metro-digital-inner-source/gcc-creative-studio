@@ -1,0 +1,145 @@
+<!--
+ Copyright 2025 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<div class="analytics-page p-6 md:p-8">
+  <header class="page-header">
+    <div class="page-header__text">
+      <h1 class="page-title">Workspace Usage Analytics</h1>
+      <p class="page-subtitle">
+        Estimated GenAI cost per user for the selected workspace. Personal
+        workspaces show only the owner; shared workspaces show every member.
+      </p>
+    </div>
+    <button
+      mat-stroked-button
+      type="button"
+      class="unit-prices-btn"
+      (click)="openUnitPricesDialog()"
+      aria-label="View model unit prices">
+      <mat-icon>info_outline</mat-icon>
+      Unit prices
+    </button>
+  </header>
+
+  <div class="controls-row">
+    <mat-form-field appearance="outline" class="workspace-select">
+      <mat-label>Workspace</mat-label>
+      <mat-select
+        [(ngModel)]="selectedWorkspaceId"
+        (selectionChange)="onWorkspaceChange()">
+        <mat-option *ngFor="let ws of workspaces" [value]="ws.id">
+          {{ ws.name }} ({{ scopeLabel(ws.type) }})
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <studio-date-range-filter
+      [startDate]="startCalendarDate"
+      [endDate]="endCalendarDate"
+      (dateChange)="onCalendarDateChange($event)"
+      size="small">
+    </studio-date-range-filter>
+  </div>
+
+  <div *ngIf="isLoading" class="loading-wrap">
+    <mat-spinner diameter="48"></mat-spinner>
+  </div>
+
+  <div *ngIf="errorMessage && !isLoading" class="error-banner">
+    {{ errorMessage }}
+  </div>
+
+  <div *ngIf="!isLoading && !errorMessage && usage" class="content-body">
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-label">Workspace</div>
+        <div class="summary-value">{{ usage.workspaceName }}</div>
+        <div class="summary-meta">
+          {{ scopeLabel(usage.workspaceScope) }}
+          <span *ngIf="isPersonalWorkspace"> · owner only</span>
+        </div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-label">Users</div>
+        <div class="summary-value">{{ users.length }}</div>
+      </div>
+
+      <div class="summary-card summary-card--highlight">
+        <div class="summary-label">Estimated Spend (USD)</div>
+        <div class="summary-value">${{ totalCost | number: '1.2-4' }}</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-label">Events / Tokens</div>
+        <div class="summary-value">{{ totalEvents | number }}</div>
+        <div class="summary-meta">{{ totalTokens | number }} tokens</div>
+      </div>
+    </div>
+
+    <div class="table-section">
+      <h2 class="table-section__title">Usage by user</h2>
+
+      <div class="table-wrap">
+        <table mat-table [dataSource]="users" class="usage-table">
+          <ng-container matColumnDef="userEmail">
+            <th mat-header-cell *matHeaderCellDef>User</th>
+            <td mat-cell *matCellDef="let row">{{ row.userEmail }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="eventCount">
+            <th mat-header-cell *matHeaderCellDef>API Calls</th>
+            <td mat-cell *matCellDef="let row">
+              {{ row.eventCount | number }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="tokens">
+            <th mat-header-cell *matHeaderCellDef>Tokens (in / out / think)</th>
+            <td mat-cell *matCellDef="let row">
+              {{ row.totalPromptTokens | number }} /
+              {{ row.totalCandidatesTokens | number }} /
+              {{ row.totalThoughtsTokens | number }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="media">
+            <th mat-header-cell *matHeaderCellDef>Media</th>
+            <td mat-cell *matCellDef="let row">
+              {{ row.totalMediaCount | number }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="cost">
+            <th mat-header-cell *matHeaderCellDef>Est. Cost (USD)</th>
+            <td mat-cell *matCellDef="let row">
+              ${{ row.estimatedCostUsd | number: '1.2-4' }}
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="userColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: userColumns"></tr>
+
+          <tr class="mat-row" *matNoDataRow>
+            <td class="mat-cell empty-row" colspan="5">
+              No usage found for this workspace in the selected date range.
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

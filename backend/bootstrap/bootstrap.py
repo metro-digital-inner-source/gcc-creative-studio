@@ -199,6 +199,17 @@ async def ensure_default_team_workspace_exists(
         )
 
 
+async def cleanup_invalid_personal_workspaces(db: AsyncSession) -> None:
+    """Removes personal workspaces that are not named after the owner's email."""
+    workspace_service = build_workspace_service(db)
+    deleted_count = await workspace_service.cleanup_invalid_personal_workspaces()
+    if deleted_count:
+        logger.info(
+            "Removed %d invalid personal workspace(s) during bootstrap.",
+            deleted_count,
+        )
+
+
 async def ensure_bootstrap_admin_workspaces(db: AsyncSession) -> None:
     """Provisions personal workspaces for all configured bootstrap admin emails."""
     admin_emails = set(config_service.ADMIN_OWNER_EMAILS)
@@ -615,6 +626,7 @@ async def main():
         async with async_session_local() as db:
             admin_user = await ensure_admin_user_exists(db)
             await ensure_default_team_workspace_exists(db, admin_user)
+            await cleanup_invalid_personal_workspaces(db)
             await ensure_bootstrap_admin_workspaces(db)
             await seed_vto_assets(db, admin_user)
             await seed_media_templates(db, admin_user)
