@@ -17,15 +17,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database import get_conn_string
+from src.database import isolated_db_session
 from src.usage.request_context import (
     get_current_loop,
     get_current_user_email,
@@ -53,27 +52,6 @@ def extract_token_usage(response: Any) -> tuple[int, int, int, int]:
         int(getattr(usage, "thoughts_token_count", None) or 0),
         int(getattr(usage, "total_token_count", None) or 0),
     )
-
-
-@asynccontextmanager
-async def _usage_db_session() -> AsyncIterator[AsyncSession]:
-    """Fresh engine/session bound to the current event loop.
-
-    Background image/video workers create a new loop, so the app-global
-    async_session_local cannot be reused there.
-    """
-    engine = create_async_engine(get_conn_string(), echo=False)
-    session_factory = async_sessionmaker(
-        bind=engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-        autoflush=False,
-    )
-    try:
-        async with session_factory() as session:
-            yield session
-    finally:
-        await engine.dispose()
 
 
 async def _resolve_user_id(
@@ -129,7 +107,7 @@ async def record_genai_usage(
     """Insert one usage event. Never raises to callers."""
     try:
         email = user_email or get_current_user_email() or "unknown"
-        async with _usage_db_session() as session:
+        async with isolated_db_session() as session:
             resolved_user_id = await _resolve_user_id(
                 session,
                 user_id if user_id is not None else get_current_user_id(),
@@ -159,17 +137,25 @@ async def record_genai_usage(
 
 def schedule_record_genai_usage(**kwargs: Any) -> None:
     """Fire-and-forget wrapper safe from async code and to_thread workers."""
-    coro = record_genai_usage(**kwargs)
+    ctx = contextvars.copy_context()
+
+    async def _record() -> None:
+        await record_genai_usage(**kwargs)
+
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(coro)
+        loop.create_task(_record())
         return
     except RuntimeError:
         pass
 
     loop = get_current_loop()
     if loop is not None and loop.is_running():
-        asyncio.run_coroutine_threadsafe(coro, loop)
+
+        def _start_on_loop() -> None:
+            ctx.run(asyncio.create_task, _record())
+
+        loop.call_soon_threadsafe(_start_on_loop)
         return
 
     logger.warning(

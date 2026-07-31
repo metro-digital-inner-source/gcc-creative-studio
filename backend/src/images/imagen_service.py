@@ -480,6 +480,8 @@ def gemini_generate_image(
     aspect_ratio: str | None = None,
     google_search: bool = False,
     resolution: str | None = None,
+    user_email: str | None = None,
+    user_id: int | None = None,
 ) -> types.GeneratedImage | None:
     """Generates an image using the Gemini API for text-to-image or
     image-to-image.
@@ -541,6 +543,8 @@ def gemini_generate_image(
                 model=model.value,
                 feature="imagen_gemini_generate_content",
                 media_count=1,
+                user_email=user_email,
+                user_id=user_id,
             )
 
             grounding_metadata = None
@@ -755,6 +759,8 @@ def _process_image_in_background(
                                         aspect_ratio=request_dto.aspect_ratio,
                                         google_search=request_dto.google_search,
                                         resolution=request_dto.resolution,
+                                        user_email=current_user.email,
+                                        user_id=current_user.id,
                                     )
                                     for _ in range(request_dto.number_of_media)
                                 ]
@@ -838,6 +844,8 @@ def _process_image_in_background(
                                     aspect_ratio=request_dto.aspect_ratio,
                                     google_search=request_dto.google_search,
                                     resolution=request_dto.resolution,
+                                    user_email=current_user.email,
+                                    user_id=current_user.id,
                                 )
                                 for _ in range(request_dto.number_of_media)
                             ]
