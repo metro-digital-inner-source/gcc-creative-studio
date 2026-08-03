@@ -48,7 +48,8 @@ resource "google_sql_database_instance" "default" {
     }
 
     ip_configuration {
-      ipv4_enabled = true
+      ipv4_enabled    = true
+      ssl_mode        = "ENCRYPTED_ONLY"
     }
   }
 
