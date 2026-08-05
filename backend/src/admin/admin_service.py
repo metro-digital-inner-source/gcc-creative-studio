@@ -156,6 +156,11 @@ class AdminService:
             name=user.name,
             role=member_role,
         )
+        # A user may belong to at most one shared (team) workspace.
+        if workspace.type == WorkspaceTypeEnum.TEAM:
+            await self.workspace_service.remove_from_other_team_workspaces(
+                user.id, workspace_id
+            )
         updated = await self.workspace_service.workspace_repo.add_member_to_workspace(
             workspace_id, member, user.id
         )
@@ -211,6 +216,11 @@ class AdminService:
                 name=user.name,
                 role=WorkspaceRoleEnum.USER,
             )
+            # A user may belong to at most one shared (team) workspace.
+            if workspace.type == WorkspaceTypeEnum.TEAM:
+                await self.workspace_service.remove_from_other_team_workspaces(
+                    user.id, workspace_id
+                )
             await self.workspace_service.workspace_repo.add_member_to_workspace(
                 workspace_id, member, user.id
             )

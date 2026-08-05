@@ -93,6 +93,22 @@ async def list_workspace_switcher_workspaces(
 
 
 @router.get(
+    "/assigned",
+    response_model=WorkspaceModel | None,
+    summary="Get Assigned Shared Workspace",
+)
+async def get_assigned_shared_workspace(
+    current_user: UserModel = Depends(get_current_user),
+    workspace_service: WorkspaceService = Depends(),
+):
+    """Returns the single shared (team) workspace the user is assigned to.
+
+    Returns null when the user has not been assigned to a shared workspace.
+    """
+    return await workspace_service.get_assigned_shared_workspace(current_user)
+
+
+@router.get(
     "/{workspace_id}/members",
     response_model=list[WorkspaceMember],
     summary="List Workspace Members",

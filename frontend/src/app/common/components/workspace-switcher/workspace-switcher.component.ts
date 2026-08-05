@@ -53,6 +53,7 @@ export class WorkspaceSwitcherComponent implements OnInit {
   selectableWorkspaces: Workspace[] = [];
   activeWorkspaceId: number | null = null;
   activeWorkspace: Workspace | null = null;
+  assignedSharedWorkspace: Workspace | null = null;
   currentUser: UserModel | null;
   readonly JobStatus = JobStatus;
   public WorkspaceType = WorkspaceType;
@@ -119,6 +120,27 @@ export class WorkspaceSwitcherComponent implements OnInit {
         handleErrorSnackbar(this.snackBar, error, 'Could not load workspaces');
       },
     });
+    this.workspaceService.getAssignedWorkspace().subscribe({
+      next: workspace => {
+        this.assignedSharedWorkspace = workspace;
+      },
+      error: () => {
+        this.assignedSharedWorkspace = null;
+      },
+    });
+  }
+
+  private findPersonalWorkspace(): Workspace | null {
+    if (!this.currentUser) return null;
+    return (
+      this.workspaces.find(
+        w =>
+          w.type === WorkspaceType.PERSONAL &&
+          w.ownerId === this.currentUser!.id,
+      ) ||
+      this.workspaces.find(w => w.type === WorkspaceType.PERSONAL) ||
+      null
+    );
   }
 
   private setWorkspaceCollections(workspaces: Workspace[]): void {
@@ -130,24 +152,11 @@ export class WorkspaceSwitcherComponent implements OnInit {
   initializeActiveWorkspace(): void {
     if (!this.isBrowser) return;
 
-    const storedWorkspaceId = localStorage.getItem('activeWorkspaceId');
-    const queryParamId = this.route.snapshot.queryParamMap.get('workspaceId');
-
-    // Order of precedence: URL query param > localStorage > default public.
-    let preferredWorkspaceId: number | null = null;
-
-    if (queryParamId) {
-      preferredWorkspaceId = parseInt(queryParamId, 10);
-    } else if (storedWorkspaceId) {
-      preferredWorkspaceId = parseInt(storedWorkspaceId, 10);
-    }
-
-    if (
-      preferredWorkspaceId &&
-      !isNaN(preferredWorkspaceId) &&
-      this.selectableWorkspaces.some(w => w.id === preferredWorkspaceId)
-    ) {
-      this.setActiveWorkspace(preferredWorkspaceId);
+    // Generation and the personal gallery are always pinned to the user's
+    // personal workspace. Shared assets are viewed via the Shared Gallery.
+    const personalWorkspace = this.findPersonalWorkspace();
+    if (personalWorkspace) {
+      this.setActiveWorkspace(personalWorkspace.id);
       return;
     }
 

@@ -129,6 +129,13 @@ class WorkspaceService:
         if not invited_user:
             return None
 
+        # A user may belong to at most one shared (team) workspace. Assigning
+        # them to a new team workspace reassigns them out of any previous one.
+        if workspace.type == WorkspaceTypeEnum.TEAM:
+            await self.remove_from_other_team_workspaces(
+                invited_user.id, workspace_id
+            )
+
         new_member = WorkspaceMember(
             user_id=invited_user.id,
             email=invited_user.email,
@@ -160,6 +167,35 @@ class WorkspaceService:
     ) -> list[WorkspaceModel]:
         """Returns all workspaces the user is a member of."""
         return await self.workspace_repo.find_by_member_id(user.id)
+
+    async def get_assigned_shared_workspace(
+        self, user: UserModel
+    ) -> WorkspaceModel | None:
+        """Returns the single shared (team) workspace the user is assigned to.
+
+        Users are assigned to at most one shared workspace. Returns None when
+        the user has not been assigned to any shared workspace yet.
+        """
+        team_workspaces = await self.workspace_repo.find_team_by_member_id(
+            user.id
+        )
+        return team_workspaces[0] if team_workspaces else None
+
+    async def remove_from_other_team_workspaces(
+        self, user_id: int, keep_workspace_id: int
+    ) -> None:
+        """Ensures a user belongs to at most one shared (team) workspace.
+
+        Removes the user from every team workspace except ``keep_workspace_id``.
+        """
+        existing_team_workspaces = (
+            await self.workspace_repo.find_team_by_member_id(user_id)
+        )
+        for team_ws in existing_team_workspaces:
+            if team_ws.id is not None and team_ws.id != keep_workspace_id:
+                await self.workspace_repo.remove_member_from_workspace(
+                    team_ws.id, user_id
+                )
 
     async def list_switcher_workspaces_for_user(
         self, user: UserModel

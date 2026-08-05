@@ -535,8 +535,12 @@ export class MediaDetailComponent implements OnDestroy {
   public deleteCurrentMedia(imageIndex = 0): void {
     if (!this.mediaItem?.id) return;
 
-    const workspaceId = this.workspaceStateService.getActiveWorkspaceId();
-    if (workspaceId === null) return;
+    // Delete against the item's own workspace so it works for both the
+    // personal gallery and the shared gallery preview.
+    const workspaceId =
+      this.mediaItem.workspaceId ??
+      this.workspaceStateService.getActiveWorkspaceId();
+    if (workspaceId === null || workspaceId === undefined) return;
 
     const imageCount = this.mediaItem.presignedUrls?.length || 1;
     const deletingSingleImage = imageCount > 1;

@@ -73,9 +73,7 @@ export class MediaLightboxComponent
     return this.isImage;
   }
 
-  get showVtoButton(): boolean {
-    return this.isImage;
-  }
+  @Input() showVtoButton = false;
   @Output() editClicked = new EventEmitter<number>();
   @Output() generateVideoClicked = new EventEmitter<{
     role: 'start' | 'end';

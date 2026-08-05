@@ -54,6 +54,13 @@ const routes: Routes = [
     path: 'gallery',
     component: MediaGalleryComponent,
   },
+  // Shared Gallery: assets shared into the user's assigned shared workspace.
+  {
+    path: 'shared-gallery',
+    component: MediaGalleryComponent,
+    canActivate: [AuthGuardService],
+    data: {sharedView: true},
+  },
   // When a user goes to '/gallery/some-unique-id', show the detail page.
   // The ':id' is a placeholder for the media item's ID.
   {

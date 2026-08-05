@@ -17,7 +17,10 @@ from fastapi import Depends, HTTPException, status
 
 from src.users.user_model import UserModel, UserRoleEnum
 from src.workspaces.repository.workspace_repository import WorkspaceRepository
-from src.workspaces.schema.workspace_model import WorkspaceModel
+from src.workspaces.schema.workspace_model import (
+    WorkspaceModel,
+    WorkspaceTypeEnum,
+)
 
 
 class WorkspaceAuth:
@@ -60,5 +63,29 @@ class WorkspaceAuth:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Workspace with ID '{workspace_id}' not found.",
+            )
+        return workspace
+
+    async def authorize_personal_workspace(
+        self,
+        workspace_id: int,
+        user: UserModel,
+    ) -> WorkspaceModel:
+        """Authorizes a generation/upload into the caller's personal workspace.
+
+        Content creation (generation and uploads) is always pinned to the
+        caller's own personal workspace, including for system admins. Shared
+        (team) workspaces are collect-only and receive assets via sharing.
+        """
+        workspace = await self.authorize(workspace_id, user)
+
+        is_personal = workspace.type == WorkspaceTypeEnum.PERSONAL
+        is_owner = workspace.owner_id == user.id
+        if not (is_personal and is_owner):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Content can only be created in your personal workspace."
+                ),
             )
         return workspace

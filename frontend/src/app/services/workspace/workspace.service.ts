@@ -47,6 +47,10 @@ export class WorkspaceService {
     return this.http.get<Workspace[]>(`${this.apiUrl}/switcher`);
   }
 
+  getAssignedWorkspace(): Observable<Workspace | null> {
+    return this.http.get<Workspace | null>(`${this.apiUrl}/assigned`);
+  }
+
   getWorkspaceMembers(workspaceId: number): Observable<WorkspaceMember[]> {
     return this.http.get<WorkspaceMember[]>(
       `${this.apiUrl}/${workspaceId}/members`,

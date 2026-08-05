@@ -36,6 +36,7 @@ import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {MatIconRegistry} from '@angular/material/icon';
 import {DomSanitizer, SafeResourceUrl} from '@angular/platform-browser';
+import {ActivatedRoute} from '@angular/router';
 import {Subscription, fromEvent, forkJoin, of} from 'rxjs';
 import {debounceTime, map, switchMap} from 'rxjs/operators';
 import {MediaItemSelection} from '../../common/components/image-selector/image-selector.component';
@@ -122,6 +123,11 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
   public isCopying = false;
   public isSharingToTeam = false;
   public showAdvancedFilters = false;
+
+  /** True when rendered as the Shared Gallery (assigned shared workspace). */
+  public sharedView = false;
+  /** The assigned shared workspace id when in shared view. */
+  public sharedWorkspaceId: number | null = null;
 
   toggleAdvancedFilters() {
     this.showAdvancedFilters = !this.showAdvancedFilters;
@@ -232,6 +238,7 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
     public dialog: MatDialog,
     private tagsService: TagsService,
     private workspaceService: WorkspaceService,
+    private route: ActivatedRoute,
     @Inject(PLATFORM_ID) platformId: Object,
   ) {
     this.isBrowser = isPlatformBrowser(platformId);
@@ -258,6 +265,13 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isInitialized = true;
     const userDetails = this.userService.getUserDetails();
     this.isAdmin = userDetails?.roles?.includes(UserRolesEnum.ADMIN) || false;
+
+    this.sharedView = !!this.route.snapshot.data['sharedView'];
+    if (this.sharedView) {
+      this.initSharedView();
+    } else {
+      this.galleryService.setOverrideWorkspaceId(null);
+    }
 
     this.mediaTypeFilter = this.filterByType || '';
     this.searchTerm(); // Set initial filters
@@ -303,8 +317,42 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  /** Loads the assigned shared workspace and pins the gallery to it. */
+  private initSharedView(): void {
+    this.workspaceService.getAssignedWorkspace().subscribe({
+      next: workspace => {
+        if (workspace?.id) {
+          this.sharedWorkspaceId = workspace.id;
+          this.galleryService.setOverrideWorkspaceId(workspace.id);
+          this.loadTags();
+        } else {
+          this.galleryService.setOverrideWorkspaceId(null);
+          this.snackBar.open(
+            'You are not assigned to a shared workspace yet.',
+            'Close',
+            {duration: 4000},
+          );
+        }
+      },
+      error: err => {
+        console.error('Failed to load shared workspace', err);
+      },
+    });
+  }
+
+  /**
+   * The workspace used for gallery data operations. In the Shared Gallery this
+   * is the assigned shared workspace; otherwise the active (personal) one.
+   */
+  private getGalleryWorkspaceId(): number | null {
+    if (this.sharedView) {
+      return this.sharedWorkspaceId;
+    }
+    return this.workspaceStateService.getActiveWorkspaceId();
+  }
+
   private loadTags(search?: string): void {
-    const workspaceId = this.workspaceStateService.getActiveWorkspaceId();
+    const workspaceId = this.getGalleryWorkspaceId();
     if (workspaceId) {
       const filterUserId = this.onlyMyTags ? this.userId : undefined;
       this.tagsService
@@ -351,7 +399,7 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
 
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
-        const workspaceId = this.workspaceStateService.getActiveWorkspaceId();
+        const workspaceId = this.getGalleryWorkspaceId();
         const tag = this.availableTags.find(t => t.name === option.value);
         if (workspaceId && tag) {
           this.tagsService.deleteTag(workspaceId, tag.id).subscribe(() => {
@@ -393,6 +441,9 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
     this.resizeSubscription?.unsubscribe();
     this._hostVisibilityObserver?.disconnect();
     this._scrollObserver?.disconnect();
+    if (this.sharedView) {
+      this.galleryService.setOverrideWorkspaceId(null);
+    }
   }
 
   public trackByImage(index: number, image: GalleryItem): number | string {
@@ -516,7 +567,7 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     this.isDeleting = true;
-    const workspaceId = this.workspaceStateService.getActiveWorkspaceId() || 0;
+    const workspaceId = this.getGalleryWorkspaceId() || 0;
     this.galleryService
       .bulkDelete(
         [
@@ -571,41 +622,31 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   shareItemToTeam(item: GalleryItem): void {
-    if (item.itemType !== 'media_item' || this.isSharingToTeam) return;
+    if (this.sharedView || this.isSharingToTeam) return;
 
-    const dialogRef = this.dialog.open(CopyToWorkspaceDialogComponent, {
-      width: '450px',
-      data: {itemCount: 1, teamWorkspacesOnly: true},
-    });
-
-    dialogRef.afterClosed().subscribe((targetWorkspaceId: number | null) => {
-      if (!targetWorkspaceId) return;
-
-      this.isSharingToTeam = true;
-      this.galleryService
-        .bulkCopy([{id: item.id, type: 'media_item'}], targetWorkspaceId)
-        .subscribe({
-          next: result => {
-            this.snackBar.open(
-              `${result.copied_count} item(s) shared to team workspace`,
-              'Close',
-              {duration: 3000},
-            );
-            this.selectedItems.delete(`${item.itemType}:${item.id}`);
-            this.isSharingToTeam = false;
-            this.searchTerm();
-          },
-          error: err => {
-            console.error('Error sharing item to team workspace:', err);
-            this.snackBar.open(
-              'Failed to share item to team workspace',
-              'Close',
-              {duration: 3000},
-            );
-            this.isSharingToTeam = false;
-          },
-        });
-    });
+    this.isSharingToTeam = true;
+    this.galleryService
+      .shareToSharedWorkspace([{id: item.id, type: item.itemType}])
+      .subscribe({
+        next: result => {
+          this.snackBar.open(
+            `${result.copied_count} item(s) shared to your workspace`,
+            'Close',
+            {duration: 3000},
+          );
+          this.selectedItems.delete(`${item.itemType}:${item.id}`);
+          this.isSharingToTeam = false;
+        },
+        error: err => {
+          console.error('Error sharing item to shared workspace:', err);
+          this.snackBar.open(
+            err?.error?.detail || 'Failed to share item to your workspace',
+            'Close',
+            {duration: 4000},
+          );
+          this.isSharingToTeam = false;
+        },
+      });
   }
 
   private performCopy(targetWorkspaceId: number): void {
@@ -641,7 +682,7 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
       return {id: parseInt(itemId), type};
     });
 
-    const workspaceId = this.workspaceStateService.getActiveWorkspaceId() || 0;
+    const workspaceId = this.getGalleryWorkspaceId() || 0;
     this.galleryService.bulkDownload(itemsToDownload, workspaceId).subscribe({
       next: blob => {
         const url = window.URL.createObjectURL(blob);
@@ -695,7 +736,7 @@ export class MediaGalleryComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private performBulkTag(selectedTags: string[]): void {
-    const workspaceId = this.workspaceStateService.getActiveWorkspaceId();
+    const workspaceId = this.getGalleryWorkspaceId();
     if (!workspaceId) return;
 
     const selected = Array.from(this.selectedItems);
