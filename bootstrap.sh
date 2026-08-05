@@ -27,8 +27,8 @@ set -e
 # --- Configuration ---
 REQUIRED_TERRAFORM_VERSION="1.14.1"
 UPSTREAM_REPO_URL="https://github.com/GoogleCloudPlatform/gcc-creative-studio"
-TEMPLATE_ENV_DIR="environments/dev-infra-example"
-DEFAULT_ENV_NAME="dev-infra"
+TEMPLATE_ENV_DIR="environments/gv-dev"
+DEFAULT_ENV_NAME="gv-dev"
 DEFAULT_BRANCH_NAME="main"
 GCS_BUCKET_SUFFIX_FORMAT="cstudio-%s-tfstate"
 GCS_BUCKET_PREFIX_FORMAT="infra/%s/state"
@@ -92,6 +92,56 @@ read_state() {
     if [ -f "$STATE_FILE" ]; then
         info "Found previous state file. Resuming..."
         set -a; source "$STATE_FILE"; set +a
+    fi
+}
+
+# --- Read GitHub Configuration from Existing tfvars ---
+read_github_config_from_tfvars() {
+    local tfvars_file=$1
+    if [ -f "$tfvars_file" ]; then
+        GITHUB_REPO_OWNER=$(grep "^github_repo_owner" "$tfvars_file" | cut -d'"' -f2)
+        GITHUB_REPO_NAME=$(grep "^github_repo_name" "$tfvars_file" | cut -d'"' -f2)
+        GITHUB_BRANCH=$(grep "^github_branch_name" "$tfvars_file" | cut -d'"' -f2)
+        
+        if [ -n "$GITHUB_REPO_OWNER" ] && [ -n "$GITHUB_REPO_NAME" ] && [ -n "$GITHUB_BRANCH" ]; then
+            return 0  # Successfully read values
+        fi
+    fi
+    return 1  # Could not read values
+}
+
+# --- Read Project Configuration from Existing tfvars ---
+read_project_config_from_tfvars() {
+    local tfvars_file=$1
+    if [ -f "$tfvars_file" ]; then
+        local gcp_proj=$(grep "^gcp_project_id" "$tfvars_file" | cut -d'"' -f2)
+        local gcp_reg=$(grep "^gcp_region" "$tfvars_file" | cut -d'"' -f2)
+        local github_conn=$(grep "^github_conn_name" "$tfvars_file" | cut -d'"' -f2)
+        
+        # Only set if they're real values (not placeholders)
+        if [ -n "$gcp_proj" ] && [[ ! "$gcp_proj" =~ "YOUR_" ]]; then
+            GCP_PROJECT_ID="$gcp_proj"
+        fi
+        if [ -n "$gcp_reg" ]; then
+            GCP_REGION="$gcp_reg"
+        fi
+        if [ -n "$github_conn" ]; then
+            GITHUB_CONN_NAME="$github_conn"
+        fi
+    fi
+}
+
+# --- Resolve the actual tfvars file in an environment directory ---
+resolve_tfvars_path() {
+    local env_dir="$1"  # absolute path to environment directory
+    local env_name="$2"
+    # Prefer <env_name>.tfvars, fall back to any *.tfvars file in the directory
+    if [ -f "$env_dir/$env_name.tfvars" ]; then
+        echo "$env_dir/$env_name.tfvars"
+    else
+        local found
+        found=$(find "$env_dir" -maxdepth 1 -name "*.tfvars" ! -name "*.bak" | head -n 1)
+        echo "$found"
     fi
 }
 
@@ -244,6 +294,24 @@ install_terraform() {
 setup_project() {
     step 3 "Configuring Google Cloud Project"
 
+    # Try to read from default environment's tfvars if it exists
+    if [ -d "infra/environments/$DEFAULT_ENV_NAME" ]; then
+        local DEFAULT_TFVARS="infra/environments/$DEFAULT_ENV_NAME/$DEFAULT_ENV_NAME.tfvars"
+        if [ -f "$DEFAULT_TFVARS" ]; then
+            read_project_config_from_tfvars "$DEFAULT_TFVARS"
+            if [ -n "$GCP_PROJECT_ID" ]; then
+                info "Detected GCP project ID from existing environment: $GCP_PROJECT_ID"
+                prompt "Use this project? (y/n)"
+                read -r REPLY < /dev/tty
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    gcloud config set project "$GCP_PROJECT_ID"
+                    success "Project '$GCP_PROJECT_ID' is configured."
+                    return
+                fi
+            fi
+        fi
+    fi
+
     # try detecting current project on the current terminal
     CURRENT_GCLOUD_PROJECT=$(gcloud config get-value project 2>/dev/null || echo "")
 
@@ -281,7 +349,29 @@ setup_project() {
 setup_repo() {
     step 4 "Configuring Git Repository"
 
-    # Since the script is run via curl, it never starts inside a repo. We must clone it.
+    # Check if we're already in a valid repo with the right structure
+    if [[ -d "infra" && -f "bootstrap.sh" ]]; then
+        info "Detected existing Creative Studio repository in current directory."
+        REPO_ROOT=$(pwd)
+        export REPO_ROOT
+        
+        # Try to detect GitHub info from git remote
+        GITHUB_REPO_URL=$(git remote get-url origin 2>/dev/null || echo "")
+        if [ -n "$GITHUB_REPO_URL" ]; then
+            GITHUB_REPO_OWNER=$(echo "$GITHUB_REPO_URL" | sed -n 's/.*github.com[\/:]\(.*\)\/.*/\1/p')
+            GITHUB_REPO_NAME=$(basename "$GITHUB_REPO_URL" .git)
+            info "Detected GitHub owner: $GITHUB_REPO_OWNER"
+            info "Detected GitHub repo name: $GITHUB_REPO_NAME"
+            
+            # Try to get branch from git
+            SELECTED_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+            DEFAULT_BRANCH_NAME="$SELECTED_BRANCH"
+            success "Repository already configured locally."
+            return
+        fi
+    fi
+
+    # Otherwise, prompt for fork and clone
     warn "Please fork the main repository first: ${UPSTREAM_REPO_URL}/fork"
     while true; do
         prompt "What is the git URL of YOUR forked repository? (e.g., https://github.com/user/repo.git)"
@@ -354,9 +444,23 @@ configure_environment() {
         ENV_NAME=${ENV_NAME:-$DEFAULT_ENV_NAME}
     else info "Using previously configured environment: $ENV_NAME"; fi
     ENV_DIR="environments/$ENV_NAME";
-    TFVARS_FILE_PATH="$REPO_ROOT/infra/$ENV_DIR/$ENV_NAME.tfvars"
+    TFVARS_FILE_PATH=$(resolve_tfvars_path "$REPO_ROOT/infra/$ENV_DIR" "$ENV_NAME")
     STATE_FILE="$REPO_ROOT/infra/$ENV_DIR/.bootstrap_state";
     read_state
+    
+    # Check if environment already exists and read existing config
+    if [ -d "$ENV_DIR" ] && [ -f "$TFVARS_FILE_PATH" ]; then
+        info "Environment directory '$ENV_DIR' already exists."
+        if read_github_config_from_tfvars "$TFVARS_FILE_PATH"; then
+            info "Loaded GitHub configuration from existing tfvars:"
+            info "  Owner: $GITHUB_REPO_OWNER"
+            info "  Repo: $GITHUB_REPO_NAME"
+            info "  Branch: $GITHUB_BRANCH"
+            success "Configuration files for '$ENV_NAME' environment are ready."
+            return
+        fi
+    fi
+    
     if [ ! -d "$ENV_DIR" ]; then
         info "Creating new environment directory from template: $TEMPLATE_ENV_DIR"; cp -r "$TEMPLATE_ENV_DIR" "$ENV_DIR"
         prompt "Do you have an existing GCS bucket for Terraform state? (y/n)"; read -r REPLY < /dev/tty
@@ -396,8 +500,16 @@ configure_environment() {
 }
 
 handle_manual_steps() {
-    step 6 "Manual Steps Required"; cd "$REPO_ROOT/infra"; TFVARS_FILE_PATH="$ENV_DIR/$ENV_NAME.tfvars"
+    step 6 "Manual Steps Required"; cd "$REPO_ROOT/infra"
+    TFVARS_FILE_PATH=$(resolve_tfvars_path "$REPO_ROOT/infra/$ENV_DIR" "$ENV_NAME")
+    
+    # Try to read project config from existing tfvars to avoid re-prompting
+    if [ -f "$TFVARS_FILE_PATH" ]; then
+        read_project_config_from_tfvars "$TFVARS_FILE_PATH"
+    fi
+    
     info "Enabling required Google Cloud APIs..."; gcloud services enable cloudbuild.googleapis.com secretmanager.googleapis.com iap.googleapis.com identitytoolkit.googleapis.com texttospeech.googleapis.com workflows.googleapis.com --project="$GCP_PROJECT_ID"
+    
     if [ -z "$GITHUB_CONN_NAME" ]; then
         prompt "\nDo you already have a Cloud Build Host Connection for GitHub in this project? (y/n)"; read -r REPLY < /dev/tty
         if [[ $REPLY =~ ^[Yy]$ ]]; then prompt "Please enter the existing connection name:"; read -p "   Connection Name: " GITHUB_CONN_NAME < /dev/tty
@@ -412,6 +524,8 @@ handle_manual_steps() {
         fi
         sed -i.bak "s|^[#[:space:]]*github_conn_name[[:space:]]*=.*|github_conn_name = \"$GITHUB_CONN_NAME\"|g" "$TFVARS_FILE_PATH"
         write_state "GITHUB_CONN_NAME" "$GITHUB_CONN_NAME"
+    else
+        info "Using existing Cloud Build connection: $GITHUB_CONN_NAME"
     fi
     rm -f "$TFVARS_FILE_PATH.bak"
 
@@ -496,15 +610,32 @@ setup_db_secrets() {
     else
         info "Creating new secret '$SECRET_NAME'..."
         
-        # 3. Generate a secure random password (alphanumeric, no special chars that break URLs)
-        # using openssl. We use base64 but strip non-alphanumeric chars to be safe for DB connection strings
-        local DB_PASSWORD=$(openssl rand -base64 20 | tr -dc 'a-zA-Z0-9' | head -c 16)
+        # 3. Generate a secure random password that satisfies COMPLEXITY_DEFAULT policy:
+        # must contain lowercase, uppercase, number, and non-alphanumeric character.
+        # Avoid chars that break shell or DB connection strings (@, :, /, #, ?)
+        local DB_PASSWORD
+        while true; do
+            DB_PASSWORD=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9!$%^&*_+=' | head -c 24)
+            # Verify all complexity requirements are met
+            if echo "$DB_PASSWORD" | grep -q '[a-z]' && \
+               echo "$DB_PASSWORD" | grep -q '[A-Z]' && \
+               echo "$DB_PASSWORD" | grep -q '[0-9]' && \
+               echo "$DB_PASSWORD" | grep -q '[!$%^&*_+=]'; then
+                break
+            fi
+        done
         
         # 4. Create the secret and add the first version
         # We use printf to avoid trailing newlines
+        # Use user-managed replication in the project region to comply with
+        # org policy constraints/gcp.resourceLocations (global replication is blocked)
+        local SECRET_REGION
+        SECRET_REGION=$(grep "^gcp_region" "$TFVARS_FILE_PATH" 2>/dev/null | cut -d'"' -f2)
+        SECRET_REGION=${SECRET_REGION:-europe-west3}
         printf "%s" "$DB_PASSWORD" | gcloud secrets create "$SECRET_NAME" \
             --data-file=- \
-            --replication-policy="automatic" \
+            --replication-policy="user-managed" \
+            --locations="$SECRET_REGION" \
             --project="$GCP_PROJECT_ID" \
             --quiet
 
@@ -514,7 +645,8 @@ setup_db_secrets() {
 
 run_terraform() {
     step 8 "Deploying Infrastructure with Terraform";
-	TFVARS_FILE_PATH="$REPO_ROOT/infra/environments/$ENV_NAME/$ENV_NAME.tfvars"; info "Navigating to $REPO_ROOT/infra/environments/$ENV_NAME..."; cd "$REPO_ROOT/infra/environments/$ENV_NAME"
+    info "Navigating to $REPO_ROOT/infra/environments/$ENV_NAME..."; cd "$REPO_ROOT/infra/environments/$ENV_NAME"
+    TFVARS_FILE_PATH=$(resolve_tfvars_path "$REPO_ROOT/infra/environments/$ENV_NAME" "$ENV_NAME")
     info "Initializing Terraform..."; terraform init -reconfigure
     info "Planning Terraform changes..."; terraform plan -var-file="$TFVARS_FILE_PATH"
     prompt "\nTerraform is ready to apply the changes. This will create the infrastructure, including empty secret shells."; prompt "Do you want to proceed with 'terraform apply'? (y/n)"; read -r REPLY < /dev/tty
@@ -524,7 +656,7 @@ run_terraform() {
 
 update_oauth_client() {
     step 10 "Configuring OAuth Client URIs"; cd "$REPO_ROOT"
-    TFVARS_FILE_PATH="${TFVARS_FILE_PATH:-$REPO_ROOT/infra/environments/$ENV_NAME/$ENV_NAME.tfvars}"
+    TFVARS_FILE_PATH="${TFVARS_FILE_PATH:-$(resolve_tfvars_path "$REPO_ROOT/infra/environments/$ENV_NAME" "$ENV_NAME")}"
     if [ -z "$AUTO_OAUTH_CLIENT_ID" ]; then warn "Could not find IAP OAuth Client ID. Skipping URI update."; return; fi
     info "Fetching full OAuth client name..."; local OAUTH_CLIENT_FULL_NAME=$(gcloud iap oauth-clients list "$GCP_PROJECT_ID" --format="json" | jq -r --arg clientid "$AUTO_OAUTH_CLIENT_ID" '.[] | select(.name | contains($clientid) or .clientId == $clientid) | .name' | head -n 1)
     if [ -z "$OAUTH_CLIENT_FULL_NAME" ]; then warn "Could not resolve the full name for the OAuth client. Skipping URI update."; return; fi
@@ -659,7 +791,7 @@ seed_data() {
 
 trigger_builds() {
     step 13 "Triggering Initial Builds"; cd "$REPO_ROOT"
-    TFVARS_FILE_PATH="${TFVARS_FILE_PATH:-$REPO_ROOT/infra/environments/$ENV_NAME/$ENV_NAME.tfvars}"
+    TFVARS_FILE_PATH="${TFVARS_FILE_PATH:-$(resolve_tfvars_path "$REPO_ROOT/infra/environments/$ENV_NAME" "$ENV_NAME")}"
     prompt "Would you like to trigger the initial builds for the frontend and backend now? (y/n)"; read -r REPLY < /dev/tty
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then info "You can trigger the builds manually later by pushing a commit or via the Cloud Build UI."; return; fi
     local REGION
@@ -674,7 +806,7 @@ trigger_builds() {
 configure_iap() {
     step 14 "Enabling IAP on Frontend Cloud Run"
     cd "$REPO_ROOT"
-    TFVARS_FILE_PATH="${TFVARS_FILE_PATH:-$REPO_ROOT/infra/environments/$ENV_NAME/$ENV_NAME.tfvars}"
+    TFVARS_FILE_PATH="${TFVARS_FILE_PATH:-$(resolve_tfvars_path "$REPO_ROOT/infra/environments/$ENV_NAME" "$ENV_NAME")}"
 
     local REGION PROJECT_NUMBER
     REGION=$(grep 'gcp_region' "$TFVARS_FILE_PATH" | awk -F'"' '{print $2}')
