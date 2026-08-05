@@ -94,3 +94,8 @@ variable "iap_access_members" {
   description = "IAM members granted roles/iap.httpsResourceAccessor (e.g. group:team@example.com)."
   default     = []
 }
+
+variable "backend_host" {
+  type        = string
+  description = "Backend Cloud Run hostname used by the frontend /api proxy at runtime."
+}

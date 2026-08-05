@@ -26,7 +26,7 @@ output "frontend_service_url" {
 
 output "backend_host" {
   description = "Backend Cloud Run hostname used by frontend nginx /api proxy."
-  value       = "${var.backend_service_name}-${data.google_project.project.number}.${var.gcp_region}.run.app"
+  value       = trimprefix(module.backend_service.service_url, "https://")
 }
 
 output "iap_access_members" {

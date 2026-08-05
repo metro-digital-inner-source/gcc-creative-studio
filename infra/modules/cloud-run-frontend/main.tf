@@ -48,6 +48,10 @@ resource "google_cloud_run_v2_service" "this" {
     service_account = google_service_account.run_sa.email
     containers {
       image = "us-docker.pkg.dev/cloudrun/container/hello:latest"
+      env {
+        name  = "BACKEND_HOST"
+        value = var.backend_host
+      }
       resources {
         limits = {
           cpu    = var.cpu

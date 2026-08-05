@@ -44,6 +44,15 @@ resource "google_storage_bucket_iam_member" "bucket_creator_binding" {
   member = "serviceAccount:${google_service_account.bucket_reader_sa.email}"
 }
 
+# Allow the backend Cloud Run SA to sign GCS presigned URLs on behalf of the
+# bucket reader SA (SIGNING_SA_EMAIL). Without this, presigned URL generation
+# fails and generated media cannot be displayed in the gallery.
+resource "google_service_account_iam_member" "backend_signs_as_bucket_reader" {
+  service_account_id = google_service_account.bucket_reader_sa.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${module.backend_service.run_sa_email}"
+}
+
 data "google_project" "project" {
   project_id = var.gcp_project_id
 }
@@ -53,8 +62,8 @@ locals {
   region_code = join("", [for s in split("-", var.gcp_region) : substr(s, 0, 1)])
   backend_url = "https://${var.backend_service_name}-${data.google_project.project.number}.${var.gcp_region}.run.app"
   # Cloud Run URL is predictable from service name + project number + region.
-  frontend_url  = "https://${var.frontend_service_name}-${data.google_project.project.number}.${var.gcp_region}.run.app"
-  backend_host  = "${var.backend_service_name}-${data.google_project.project.number}.${var.gcp_region}.run.app"
+  frontend_url = "https://${var.frontend_service_name}-${data.google_project.project.number}.${var.gcp_region}.run.app"
+  backend_host = "${var.backend_service_name}-${data.google_project.project.number}.${var.gcp_region}.run.app"
 
   backend_env_vars = merge(
     lookup(var.be_env_vars, "common", {}),
@@ -93,10 +102,10 @@ data "google_secret_manager_secret_version" "db_password" {
 
 # 2. Call PostgreSQL Module
 module "postgresql" {
-  source      = "../postgresql"
-  project_id  = var.gcp_project_id
-  region      = var.gcp_region
-  
+  source     = "../postgresql"
+  project_id = var.gcp_project_id
+  region     = var.gcp_region
+
   # Pass the ACTUAL value to create the user
   db_password = data.google_secret_manager_secret_version.db_password.secret_data
 }
@@ -117,15 +126,15 @@ module "backend_service" {
   cloudbuild_yaml_path  = "backend/cloudbuild.yaml"
   included_files_glob   = ["backend/**"]
   container_env_vars    = local.backend_env_vars
-  runtime_secrets = var.backend_runtime_secrets
+  runtime_secrets       = var.backend_runtime_secrets
   custom_audiences      = var.backend_custom_audiences
   scaling_min_instances = 1
-  source_repository_id = google_cloudbuildv2_repository.source_repo.id
-  cpu = var.be_cpu
-  memory = var.be_memory
-  build_substitutions   = merge(var.be_build_substitutions,
+  source_repository_id  = google_cloudbuildv2_repository.source_repo.id
+  cpu                   = var.be_cpu
+  memory                = var.be_memory
+  build_substitutions = merge(var.be_build_substitutions,
     {
-      _REGION = var.gcp_region
+      _REGION       = var.gcp_region
       _SERVICE_NAME = var.backend_service_name
     }
   )
@@ -134,9 +143,9 @@ module "backend_service" {
   cloud_sql_connection_name = module.postgresql.connection_name
   db_name                   = module.postgresql.db_name
   db_user                   = module.postgresql.db_user
-  
+
   # Pass the Secret ID reference (NOT the value) for Cloud Run
-  db_secret_id              = "creative-studio-db-password"
+  db_secret_id = "creative-studio-db-password"
 }
 
 module "frontend_service" {
@@ -155,6 +164,7 @@ module "frontend_service" {
   memory               = var.fe_memory
   iap_enabled          = var.iap_enabled
   iap_access_members   = var.iap_access_members
+  backend_host         = trimprefix(module.backend_service.service_url, "https://")
 
   build_substitutions = merge(
     var.fe_build_substitutions,
