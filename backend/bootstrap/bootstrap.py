@@ -71,6 +71,11 @@ logger = logging.getLogger(__name__)
 # This makes all file paths relative to the script's own location.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Well-known name of the single shared workspace that all platform admins
+# belong to. It is looked up by workspace type (ADMIN), so this name is only
+# used for display when the workspace is first created.
+ADMIN_WORKSPACE_NAME = "Administrators"
+
 
 def resolve_bootstrap_admin_email() -> str | None:
     """Resolves the email used to seed the first platform admin.
@@ -186,9 +191,13 @@ async def ensure_default_team_workspace_exists(
                 owner_id=admin_user.id,
                 type=WorkspaceTypeEnum.TEAM,
             )
+            # The admin is recorded as the owner for referential integrity but
+            # is intentionally NOT added as a member: admins must not be able to
+            # view the assets of shared/user workspaces.
+            _ = owner_member
             await workspace_repo.create(
                 default_workspace,
-                initial_members=[owner_member],
+                initial_members=[],
             )
             logger.info(
                 f"Default team '{workspace_name}' created successfully."
@@ -197,6 +206,61 @@ async def ensure_default_team_workspace_exists(
         logger.error(
             f"Failed to ensure default team workspace exists: {e}", exc_info=True
         )
+
+
+async def ensure_admin_workspace_exists(
+    db: AsyncSession,
+    admin_user: UserModel | None,
+) -> None:
+    """Ensures the shared admin workspace exists, owned by the bootstrap admin."""
+    if not admin_user:
+        logger.error(
+            "Cannot create admin workspace without a bootstrap admin user."
+        )
+        return
+    try:
+        workspace_service = build_workspace_service(db)
+        await workspace_service.ensure_admin_workspace(
+            admin_user, ADMIN_WORKSPACE_NAME
+        )
+        logger.info("Shared admin workspace ensured.")
+    except Exception as e:
+        logger.error(
+            f"Failed to ensure admin workspace exists: {e}", exc_info=True
+        )
+
+
+async def remove_admins_from_shared_workspaces(db: AsyncSession) -> None:
+    """Removes admin users from any team (shared) workspace membership.
+
+    Admins belong only to their personal workspace and the shared admin
+    workspace. They must not be members of team/user workspaces so they cannot
+    view those workspaces' assets.
+    """
+    admin_emails = set(config_service.ADMIN_OWNER_EMAILS)
+    primary_admin_email = resolve_bootstrap_admin_email()
+    if primary_admin_email:
+        admin_emails.add(primary_admin_email)
+    if not admin_emails:
+        return
+
+    user_repo = UserRepository(db)
+    workspace_repo = WorkspaceRepository(db)
+    for email in sorted(admin_emails):
+        user = await user_repo.get_by_email(email)
+        if not user:
+            continue
+        team_workspaces = await workspace_repo.find_team_by_member_id(user.id)
+        for team_ws in team_workspaces:
+            if team_ws.id is not None:
+                await workspace_repo.remove_member_from_workspace(
+                    team_ws.id, user.id
+                )
+                logger.info(
+                    "Removed admin '%s' from team workspace '%s'.",
+                    email,
+                    team_ws.name,
+                )
 
 
 async def cleanup_invalid_personal_workspaces(db: AsyncSession) -> None:
@@ -237,8 +301,9 @@ async def ensure_bootstrap_admin_workspaces(db: AsyncSession) -> None:
             continue
         user = await ensure_admin_user_has_admin_role(db, user)
         await workspace_service.ensure_personal_workspace(user)
+        await workspace_service.add_user_to_admin_workspace(user)
         logger.info(
-            "Bootstrap admin personal workspace ensured for '%s'.",
+            "Bootstrap admin personal + admin workspace ensured for '%s'.",
             email,
         )
 

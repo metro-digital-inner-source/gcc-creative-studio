@@ -33,10 +33,13 @@ class WorkspaceRoleEnum(str, Enum):
 
 
 class WorkspaceTypeEnum(str, Enum):
-    """Defines whether a workspace is personal or team-shared."""
+    """Defines whether a workspace is personal, team-shared, or admin-only."""
 
     PERSONAL = "personal"
     TEAM = "team"
+    # Dedicated shared workspace that all platform admins belong to. It is
+    # created during bootstrap and is not manageable via the public API.
+    ADMIN = "admin"
 
 
 class WorkspaceMember(BaseModel):

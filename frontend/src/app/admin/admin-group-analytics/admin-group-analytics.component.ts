@@ -138,15 +138,13 @@ export class AdminGroupAnalyticsComponent implements OnInit {
   private loadWorkspaces(): void {
     this.isLoading = true;
     this.errorMessage = null;
-    this.workspaceService.getWorkspaces().subscribe({
+    // List all non-personal workspaces platform-wide so each workspace's spend
+    // can be tracked (team and admin). Personal workspaces are excluded since
+    // per-user spend is already shown in the table below.
+    this.workspaceService.getAllWorkspacesAdmin().subscribe({
       next: workspaces => {
-        // Prefer personal + shared group workspaces for usage scoping.
         this.workspaces = (workspaces || [])
-          .filter(
-            w =>
-              w.type === WorkspaceType.PERSONAL ||
-              w.type === WorkspaceType.TEAM,
-          )
+          .filter(w => w.type !== WorkspaceType.PERSONAL)
           .sort((a, b) => a.name.localeCompare(b.name));
         if (this.workspaces.length && this.selectedWorkspaceId == null) {
           this.selectedWorkspaceId = this.workspaces[0].id;

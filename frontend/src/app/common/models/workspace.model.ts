@@ -19,6 +19,7 @@ import {WorkspaceMember} from './workspace-member.model';
 export enum WorkspaceType {
   PERSONAL = 'personal',
   TEAM = 'team',
+  ADMIN = 'admin',
 }
 
 export interface Workspace {

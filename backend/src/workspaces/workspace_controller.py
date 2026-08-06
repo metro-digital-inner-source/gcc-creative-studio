@@ -101,11 +101,12 @@ async def get_assigned_shared_workspace(
     current_user: UserModel = Depends(get_current_user),
     workspace_service: WorkspaceService = Depends(),
 ):
-    """Returns the single shared (team) workspace the user is assigned to.
+    """Returns the workspace shown as the user's assignment in the switcher.
 
-    Returns null when the user has not been assigned to a shared workspace.
+    For admins this is the shared admin workspace; for regular users it is
+    their team workspace. Returns null when there is no such assignment.
     """
-    return await workspace_service.get_assigned_shared_workspace(current_user)
+    return await workspace_service.get_assigned_display_workspace(current_user)
 
 
 @router.get(

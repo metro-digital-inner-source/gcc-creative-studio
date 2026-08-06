@@ -121,7 +121,9 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
     this.workspaceService.getAllWorkspacesAdmin().subscribe({
       next: (workspaces: Workspace[]) => {
         this.workspaces = workspaces.filter(
-          ws => ws.type === WorkspaceType.TEAM,
+          ws =>
+            ws.type === WorkspaceType.TEAM ||
+            ws.type === WorkspaceType.ADMIN,
         );
         this.buildTreeData();
         this.isLoading = false;
@@ -242,6 +244,15 @@ export class UsersManagementComponent implements OnInit, OnDestroy {
       handleErrorSnackbar(
         this._snackBar,
         {message: 'Personal workspaces cannot be deleted.'},
+        'Delete workspace',
+      );
+      return;
+    }
+
+    if (workspaceType === WorkspaceType.ADMIN) {
+      handleErrorSnackbar(
+        this._snackBar,
+        {message: 'The Administrators workspace cannot be deleted.'},
         'Delete workspace',
       );
       return;

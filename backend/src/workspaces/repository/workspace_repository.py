@@ -49,6 +49,18 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
             return None
         return self._map_to_schema(workspace)
 
+    async def get_admin_workspace(self) -> WorkspaceModel | None:
+        """Finds the single shared admin workspace, if it exists."""
+        result = await self.db.execute(
+            select(self.model)
+            .where(self.model.type == WorkspaceTypeEnum.ADMIN.value)
+            .limit(1),
+        )
+        workspace = result.scalar_one_or_none()
+        if not workspace:
+            return None
+        return self._map_to_schema(workspace)
+
     async def create(
         self,
         schema: WorkspaceModel,
@@ -198,6 +210,29 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
             select(self.model)
             .where(self.model.type == WorkspaceTypeEnum.TEAM.value)
             .order_by(self.model.name)
+            .limit(limit)
+            .offset(offset),
+        )
+        workspaces = result.scalars().all()
+        return [self._map_to_schema(w) for w in workspaces]
+
+    async def find_all_team_and_admin(
+        self,
+        limit: int = 1000,
+        offset: int = 0,
+    ) -> list[WorkspaceModel]:
+        """Finds all team and admin workspaces for the admin management view."""
+        result = await self.db.execute(
+            select(self.model)
+            .where(
+                self.model.type.in_(
+                    [
+                        WorkspaceTypeEnum.TEAM.value,
+                        WorkspaceTypeEnum.ADMIN.value,
+                    ]
+                )
+            )
+            .order_by(self.model.type, self.model.name)
             .limit(limit)
             .offset(offset),
         )
@@ -363,7 +398,9 @@ class WorkspaceRepository(BaseRepository[Workspace, WorkspaceModel]):
         return WorkspaceRoleEnum.USER
 
     def _normalize_workspace_type(self, workspace_type: str) -> WorkspaceTypeEnum:
-        """Maps legacy DB workspace type values to personal/team."""
+        """Maps legacy DB workspace type values to personal/team/admin."""
+        if workspace_type == WorkspaceTypeEnum.ADMIN.value:
+            return WorkspaceTypeEnum.ADMIN
         if workspace_type in {
             WorkspaceTypeEnum.TEAM.value,
             "global",

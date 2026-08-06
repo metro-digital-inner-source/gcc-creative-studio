@@ -118,6 +118,7 @@
               *ngIf="node.type === 'workspace'"
               class="!text-xs !h-6 !px-2"
               [class.bg-purple-100]="node.workspaceType === WorkspaceType.TEAM"
+              [class.bg-amber-100]="node.workspaceType === WorkspaceType.ADMIN"
             >
               {{ node.workspaceType }}
             </mat-chip>

@@ -105,16 +105,20 @@ async def lifespan(app: FastAPI):
         from bootstrap.bootstrap import (
             cleanup_invalid_personal_workspaces,
             ensure_admin_user_exists,
+            ensure_admin_workspace_exists,
             ensure_bootstrap_admin_workspaces,
             ensure_default_team_workspace_exists,
+            remove_admins_from_shared_workspaces,
         )
         from src.database import async_session_local
 
         async with async_session_local() as db:
             admin_user = await ensure_admin_user_exists(db)
             await ensure_default_team_workspace_exists(db, admin_user)
+            await ensure_admin_workspace_exists(db, admin_user)
             await cleanup_invalid_personal_workspaces(db)
             await ensure_bootstrap_admin_workspaces(db)
+            await remove_admins_from_shared_workspaces(db)
         logger.info("Database bootstrap completed successfully.")
     except Exception as e:
         logger.error(f"Failed to run database migrations/bootstrap: {e}")
