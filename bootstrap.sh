@@ -643,6 +643,29 @@ setup_db_secrets() {
     fi
 }
 
+# Seed initial versions for the IAP/token secrets that the Cloud Run services
+# mount at "versions/latest". Terraform only creates empty secret shells, so the
+# services fail to start unless a version exists first. Only seeds a secret that
+# exists but has no accessible version, so it is safe to run repeatedly.
+seed_required_secret_versions() {
+    local client_id="$1"
+    if [ -z "$client_id" ]; then
+        warn "No OAuth client ID available to seed secrets. Cloud Run may fail until 'populate_oauth_secrets' runs."
+        return
+    fi
+    local s
+    for s in GOOGLE_TOKEN_AUDIENCE IAP_CLIENT_ID; do
+        if gcloud secrets describe "$s" --project="$GCP_PROJECT_ID" >/dev/null 2>&1; then
+            if gcloud secrets versions access latest --secret="$s" --project="$GCP_PROJECT_ID" >/dev/null 2>&1; then
+                info "Secret '$s' already has a version. Skipping seed."
+            else
+                info "Seeding initial version for secret '$s'..."
+                echo -n "$client_id" | gcloud secrets versions add "$s" --data-file="-" --project="$GCP_PROJECT_ID" --quiet
+            fi
+        fi
+    done
+}
+
 run_terraform() {
     step 8 "Deploying Infrastructure with Terraform";
     info "Navigating to $REPO_ROOT/infra/environments/$ENV_NAME..."; cd "$REPO_ROOT/infra/environments/$ENV_NAME"
@@ -651,6 +674,24 @@ run_terraform() {
     info "Planning Terraform changes..."; terraform plan -var-file="$TFVARS_FILE_PATH"
     prompt "\nTerraform is ready to apply the changes. This will create the infrastructure, including empty secret shells."; prompt "Do you want to proceed with 'terraform apply'? (y/n)"; read -r REPLY < /dev/tty
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then warn "Apply cancelled."; return; fi
+
+    # --- Phase 1/2: create the Secret Manager shells first, so their versions
+    # can be seeded BEFORE the Cloud Run services (which mount them) are created.
+    # Prevents "Secret .../versions/latest was not found" on the first apply. ---
+    info "Phase 1/2: Creating Secret Manager shells..."
+    terraform apply -auto-approve -var-file="$TFVARS_FILE_PATH" \
+        -target=module.creative_studio_platform.module.backend_secrets \
+        -target=module.creative_studio_platform.module.frontend_secrets
+
+    # Resolve an OAuth client ID to seed the IAP/token secrets with.
+    local SEED_CLIENT_ID="$AUTO_OAUTH_CLIENT_ID"
+    if [ -z "$SEED_CLIENT_ID" ]; then
+        SEED_CLIENT_ID=$(grep -E '^[[:space:]]*backend_custom_audiences' "$TFVARS_FILE_PATH" 2>/dev/null | grep -oE '[0-9]+-[A-Za-z0-9_]+\.apps\.googleusercontent\.com' | head -1)
+    fi
+    seed_required_secret_versions "$SEED_CLIENT_ID"
+
+    # --- Phase 2/2: apply the full infrastructure now that the secrets have versions. ---
+    info "Phase 2/2: Applying full infrastructure..."
     terraform apply -auto-approve -var-file="$TFVARS_FILE_PATH" -parallelism=30
 }
 
@@ -798,7 +839,7 @@ trigger_builds() {
     REGION=$(grep 'gcp_region' "$TFVARS_FILE_PATH" | awk -F'"' '{print $2}')
     REGION=${REGION:-us-central1}
     info "Triggering backend build..."; gcloud builds triggers run "${BE_SERVICE_NAME}-trigger" --branch="$GITHUB_BRANCH" --project="$GCP_PROJECT_ID" --region="$REGION"
-    info "Triggering frontend build..."; gcloud builds triggers run "$GCP_PROJECT_ID-trigger" --branch="$GITHUB_BRANCH" --project $GCP_PROJECT_ID --region="$REGION"
+    info "Triggering frontend build..."; gcloud builds triggers run "${FE_SERVICE_NAME}-trigger" --branch="$GITHUB_BRANCH" --project="$GCP_PROJECT_ID" --region="$REGION"
 
     success "Builds have been triggered."; info "You can monitor their progress in the Cloud Build console:"; echo -e "   ${C_YELLOW}https://console.cloud.google.com/cloud-build/builds?project=${GCP_PROJECT_ID}${C_RESET}"
 }

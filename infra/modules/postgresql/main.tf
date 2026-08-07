@@ -25,6 +25,12 @@ resource "google_sql_database_instance" "default" {
   settings {
     tier = "db-perf-optimized-N-2"
 
+    # Required by organization custom constraint "custom.sqlAutomatedBackups".
+    backup_configuration {
+      enabled                        = true
+      point_in_time_recovery_enabled = true
+    }
+
     # Required by organization custom constraints on this project.
     database_flags {
       name  = "cloudsql.iam_authentication"
