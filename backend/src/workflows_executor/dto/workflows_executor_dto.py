@@ -15,16 +15,22 @@
 from pydantic import BaseModel
 
 from src.workflows.schema.workflow_model import (
+    AssetMultiplicationInputs,
+    AssetMultiplicationSettings,
     EditImageInputs,
     EditImageSettings,
     GenerateAudioInputs,
     GenerateAudioSettings,
     GenerateImageInputs,
     GenerateImageSettings,
+    GenerateStoryboardInputs,
+    GenerateStoryboardSettings,
     GenerateTextInputs,
     GenerateTextSettings,
     GenerateVideoInputs,
     GenerateVideoSettings,
+    ProductInSceneInputs,
+    ProductInSceneSettings,
     VirtualTryOnInputs,
     VirtualTryOnSettings,
 )
@@ -63,3 +69,21 @@ class GenerateAudioRequest(BaseModel):
     workspace_id: int
     inputs: GenerateAudioInputs
     config: GenerateAudioSettings
+
+
+class GenerateStoryboardRequest(BaseModel):
+    workspace_id: int
+    inputs: GenerateStoryboardInputs
+    config: GenerateStoryboardSettings
+
+
+class ProductInSceneRequest(BaseModel):
+    workspace_id: int
+    inputs: ProductInSceneInputs
+    config: ProductInSceneSettings
+
+
+class AssetMultiplicationRequest(BaseModel):
+    workspace_id: int
+    inputs: AssetMultiplicationInputs
+    config: AssetMultiplicationSettings

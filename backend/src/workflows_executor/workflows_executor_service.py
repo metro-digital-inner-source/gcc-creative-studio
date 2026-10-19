@@ -22,14 +22,22 @@ from httpx import AsyncClient as RestClient
 from src.common.schema.genai_model_setup import GenAIModelSetup
 from src.common.schema.media_item_model import AssetRoleEnum
 from src.config.config_service import config_service
-from src.workflows.schema.workflow_model import ReferenceMediaOrAsset
+from src.workflows.schema.workflow_model import (
+    ReferenceMediaOrAsset,
+    RenderStoryboardDto,
+    ReviseStoryboardDto,
+)
 from src.workflows_executor.dto.workflows_executor_dto import (
     EditImageRequest,
     GenerateAudioRequest,
     GenerateImageRequest,
+    GenerateStoryboardRequest,
     GenerateTextRequest,
     GenerateVideoRequest,
     VirtualTryOnRequest,
+)
+from src.workflows_executor.storyboard.storyboard_service import (
+    StoryboardService,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -599,3 +607,53 @@ class WorkflowsExecutorService:
         await self._poll_job_status(audio_id, authorization)
 
         return {"generated_audio": audio_id}
+
+    # --- Public helpers used by StoryboardService ---
+
+    def normalize_asset_inputs(
+        self,
+        inputs,
+        default_role: AssetRoleEnum = AssetRoleEnum.INPUT,
+    ):
+        return self._normalize_asset_inputs(inputs, default_role)
+
+    async def resolve_media_to_parts(
+        self, inputs, authorization: str | None = None
+    ):
+        return await self._resolve_media_to_parts(inputs, authorization)
+
+    async def poll_job_status(
+        self, media_id: int, authorization: str | None = None
+    ):
+        return await self._poll_job_status(media_id, authorization)
+
+    # =========================================
+    # Storyboard (orchestration lives in storyboard/storyboard_service.py)
+    # =========================================
+
+    async def generate_storyboard(
+        self,
+        request: GenerateStoryboardRequest,
+        authorization: str | None = None,
+    ):
+        """Brief -> plan -> character sheets -> one image per shot."""
+        logger.info("Generate storyboard execution")
+        return await StoryboardService(self).generate(request, authorization)
+
+    async def revise_storyboard(
+        self,
+        dto: ReviseStoryboardDto,
+        authorization: str | None = None,
+    ):
+        """Applies change notes to a finished storyboard."""
+        logger.info("Revise storyboard execution")
+        return await StoryboardService(self).revise(dto, authorization)
+
+    async def render_storyboard(
+        self,
+        dto: RenderStoryboardDto,
+        authorization: str | None = None,
+    ):
+        """Draws an approved plan (character sheets, then frames)."""
+        logger.info("Render storyboard execution: %s", dto.phase)
+        return await StoryboardService(self).render(dto, authorization)

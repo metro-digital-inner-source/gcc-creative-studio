@@ -34,10 +34,42 @@ import {
   ExecutionResponse,
   WorkflowCreateDto,
   WorkflowModel,
+  WorkflowPreset,
   WorkflowRunModel,
   WorkflowSearchDto,
   WorkflowUpdateDto,
 } from './workflow.models';
+
+export interface StoryboardRevisionRequest {
+  workspace_id: number;
+  shot_list: any;
+  change_notes: string;
+  settings: any;
+  plan_only?: boolean;
+}
+
+export interface StoryboardRenderRequest {
+  workspace_id: number;
+  shot_list: any;
+  phase: 'sheets' | 'frames';
+  settings: any;
+}
+
+export interface StoryboardPendingJob {
+  kind: 'frame' | 'character_sheet';
+  media_id: number;
+  previous_media_id: number | null;
+  shot_number?: number;
+  key?: string;
+}
+
+export interface StoryboardRevisionResult {
+  storyboard_frames: number[];
+  character_sheets: number[];
+  storyboard_text: string;
+  shot_list: any;
+  pending?: StoryboardPendingJob[];
+}
 
 @Injectable({
   providedIn: 'root',
@@ -165,6 +197,39 @@ export class WorkflowService implements OnDestroy {
   setFilter(filter: string) {
     this.currentFilter = filter;
     this.loadWorkflows(true, false);
+  }
+
+  getPresets(): Observable<WorkflowPreset[]> {
+    return this.http.get<WorkflowPreset[]>(
+      `${this.API_BASE_URL}/workflows/presets`,
+    );
+  }
+
+  reviseStoryboard(
+    request: StoryboardRevisionRequest,
+  ): Observable<StoryboardRevisionResult> {
+    return this.http.post<StoryboardRevisionResult>(
+      `${this.API_BASE_URL}/workflows/storyboard/revise`,
+      request,
+    );
+  }
+
+  renderStoryboard(
+    request: StoryboardRenderRequest,
+  ): Observable<StoryboardRevisionResult> {
+    return this.http.post<StoryboardRevisionResult>(
+      `${this.API_BASE_URL}/workflows/storyboard/render`,
+      request,
+    );
+  }
+
+  installPreset(presetId: string): Observable<WorkflowModel> {
+    return this.http
+      .post<WorkflowModel>(
+        `${this.API_BASE_URL}/workflows/presets/${presetId}/install`,
+        {},
+      )
+      .pipe(tap(() => this.loadWorkflows(true)));
   }
 
   createWorkflow(workflowData: WorkflowCreateDto): Observable<WorkflowModel> {
